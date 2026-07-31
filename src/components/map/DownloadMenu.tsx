@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Check, Download, FileJson, FileSpreadsheet } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Check, Download, FileJson, FileSpreadsheet, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   exportData,
@@ -25,6 +26,11 @@ interface DownloadMenuProps {
   category: CategoryKey;
   metric: MetricKey;
   className?: string;
+  /** Controlled open (for mobile dock) */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Hide built-in trigger button */
+  hideTrigger?: boolean;
 }
 
 export function DownloadMenu({
@@ -33,12 +39,22 @@ export function DownloadMenu({
   category,
   metric,
   className,
+  open: openProp,
+  onOpenChange,
+  hideTrigger,
 }: DownloadMenuProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = openProp ?? internalOpen;
+  const setOpen = (v: boolean) => {
+    onOpenChange?.(v);
+    if (openProp === undefined) setInternalOpen(v);
+  };
+
   const [scope, setScope] = useState<Scope>("filtered");
   const [mode, setMode] = useState<ExportMode>("category");
   const [format, setFormat] = useState<ExportFormat>("csv");
   const [toast, setToast] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
   const panelId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -46,6 +62,8 @@ export function DownloadMenu({
   const m = METRIC_BY_KEY[metric];
   const count = scope === "filtered" ? filtered.length : all.length;
   const isFiltered = filtered.length < all.length;
+
+  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     if (!open) return;
@@ -83,26 +101,12 @@ export function DownloadMenu({
     setOpen(false);
   };
 
-  return (
-    <div ref={rootRef} className={cn("relative", className)}>
-      <Button
-        variant="secondary"
-        size="sm"
-        className="gap-1.5"
-        aria-expanded={open}
-        aria-controls={panelId}
-        aria-haspopup="dialog"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <Download className="size-3.5 text-accent" aria-hidden />
-        <span className="hidden sm:inline">Unduh</span>
-      </Button>
-
-      {open && (
-        <>
+  const panel = open && mounted
+    ? createPortal(
+        <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-start sm:justify-end sm:p-4">
           <button
             type="button"
-            className="fixed inset-0 z-40 cursor-default"
+            className="absolute inset-0 bg-bg/50 backdrop-blur-[2px]"
             aria-label="Tutup unduh data"
             onClick={() => setOpen(false)}
           />
@@ -110,16 +114,28 @@ export function DownloadMenu({
             id={panelId}
             role="dialog"
             aria-label="Unduh data statistik"
-            className="absolute right-0 top-full z-50 mt-1.5 w-[min(100vw-1.5rem,20rem)] overflow-hidden rounded-xl border border-border bg-surface-elevated shadow-xl"
+            className="relative z-10 flex max-h-[min(88dvh,36rem)] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-border bg-surface shadow-2xl sm:mt-14 sm:max-h-[min(80dvh,32rem)] sm:rounded-2xl"
           >
-            <div className="border-b border-border px-3.5 py-3">
-              <p className="text-sm font-semibold text-fg">Unduh data</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                File menyertakan baris atribusi sumber BPS
-              </p>
+            <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border sm:hidden" />
+            <div className="flex shrink-0 items-start justify-between gap-2 border-b border-border px-4 py-3">
+              <div>
+                <p className="text-sm font-semibold text-fg">Unduh data</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Menyertakan atribusi sumber BPS
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-10 shrink-0"
+                onClick={() => setOpen(false)}
+                aria-label="Tutup"
+              >
+                <X className="size-4" />
+              </Button>
             </div>
 
-            <div className="space-y-3.5 px-3.5 py-3">
+            <div className="panel-scroll min-h-0 flex-1 space-y-3.5 overflow-y-auto px-4 py-3">
               <fieldset>
                 <legend className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   Cakupan wilayah
@@ -189,9 +205,9 @@ export function DownloadMenu({
               </fieldset>
             </div>
 
-            <div className="border-t border-border px-3.5 py-3">
-              <Button className="w-full gap-2" size="sm" onClick={handleDownload}>
-                <Download className="size-3.5" aria-hidden />
+            <div className="shrink-0 border-t border-border px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              <Button className="h-11 w-full gap-2" onClick={handleDownload}>
+                <Download className="size-4" aria-hidden />
                 Unduh {count} provinsi · {format.toUpperCase()}
               </Button>
               <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
@@ -199,20 +215,42 @@ export function DownloadMenu({
               </p>
             </div>
           </div>
-        </>
-      )}
+        </div>,
+        document.body,
+      )
+    : null;
 
-      {toast && (
-        <div
-          role="status"
-          className="fixed bottom-4 left-1/2 z-[60] max-w-[90vw] -translate-x-1/2 rounded-xl border border-border bg-surface-elevated px-4 py-2.5 text-xs text-fg shadow-xl sm:left-auto sm:right-4 sm:translate-x-0"
+  return (
+    <div ref={rootRef} className={cn("relative", className)}>
+      {!hideTrigger && (
+        <Button
+          variant="secondary"
+          size="sm"
+          className="gap-1.5"
+          aria-expanded={open}
+          aria-controls={panelId}
+          aria-haspopup="dialog"
+          onClick={() => setOpen(!open)}
         >
-          <span className="inline-flex items-center gap-2">
-            <Check className="size-3.5 text-accent" aria-hidden />
-            {toast}
-          </span>
-        </div>
+          <Download className="size-3.5 text-accent" aria-hidden />
+          <span className="hidden sm:inline">Unduh</span>
+        </Button>
       )}
+      {panel}
+      {toast &&
+        mounted &&
+        createPortal(
+          <div
+            role="status"
+            className="fixed bottom-20 left-1/2 z-[80] max-w-[90vw] -translate-x-1/2 rounded-xl border border-border bg-surface px-4 py-2.5 text-xs text-fg shadow-xl sm:bottom-4 sm:left-auto sm:right-4 sm:translate-x-0"
+          >
+            <span className="inline-flex items-center gap-2">
+              <Check className="size-3.5 text-accent" aria-hidden />
+              {toast}
+            </span>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -233,7 +271,7 @@ function ScopeBtn({
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-lg border px-2.5 py-2 text-left transition-colors",
+        "min-h-11 rounded-lg border px-2.5 py-2 text-left transition-colors",
         active
           ? "border-accent/40 bg-accent/10 text-fg"
           : "border-border bg-bg/40 text-muted-foreground hover:text-fg",
@@ -261,7 +299,7 @@ function ModeBtn({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors",
+        "flex min-h-11 items-start gap-2 rounded-lg border px-2.5 py-2.5 text-left transition-colors",
         active
           ? "border-accent/40 bg-accent/10"
           : "border-border bg-bg/40 hover:border-border-strong",
@@ -270,7 +308,9 @@ function ModeBtn({
       <span
         className={cn(
           "mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full border",
-          active ? "border-accent bg-accent text-accent-foreground" : "border-border",
+          active
+            ? "border-accent bg-accent text-accent-foreground"
+            : "border-border",
         )}
         aria-hidden
       >
@@ -302,7 +342,7 @@ function FormatBtn({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors",
+        "flex min-h-11 items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors",
         active
           ? "border-accent/40 bg-accent/10 text-fg"
           : "border-border bg-bg/40 text-muted-foreground hover:text-fg",

@@ -61,6 +61,8 @@
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     color-scheme: light;
+    /* Avoid iOS rubber-band fighting the app shell */
+    overscroll-behavior: none;
   }
 
   button:not(:disabled),
@@ -96,15 +98,29 @@
   background: var(--color-map-canvas);
   font-family: var(--font-sans);
   font-size: 13px;
+  /* touch-friendly pan */
+  touch-action: pan-x pan-y;
+}
+
+/* Keep zoom away from mobile bottom dock */
+.leaflet-bottom.leaflet-right {
+  bottom: 4.5rem;
+  right: 0.5rem;
+}
+@media (min-width: 768px) {
+  .leaflet-bottom.leaflet-right {
+    bottom: 0.5rem;
+    right: 0.5rem;
+  }
 }
 
 .leaflet-control-zoom a {
   background: color-mix(in oklab, var(--color-surface) 96%, transparent) !important;
   color: var(--color-fg) !important;
   border-color: var(--color-border) !important;
-  width: 34px !important;
-  height: 34px !important;
-  line-height: 34px !important;
+  width: 40px !important;
+  height: 40px !important;
+  line-height: 40px !important;
   backdrop-filter: blur(8px);
 }
 
@@ -118,13 +134,16 @@
   border-radius: 10px !important;
   overflow: hidden;
   box-shadow: 0 8px 24px rgb(15 23 42 / 0.08) !important;
+  margin-right: 8px !important;
+  margin-bottom: 8px !important;
 }
 
 .leaflet-control-attribution {
   background: color-mix(in oklab, var(--color-surface) 92%, transparent) !important;
   color: var(--color-muted-foreground) !important;
-  font-size: 10px !important;
+  font-size: 9px !important;
   border-radius: 6px 0 0 0;
+  max-width: 55vw;
 }
 
 .leaflet-control-attribution a {
@@ -176,4 +195,7 @@
       transparent 55%
     ),
     var(--color-bg);
+  /* Fill the live preview frame on mobile */
+  min-height: 100dvh;
+  height: 100dvh;
 }
