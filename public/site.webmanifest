@@ -1,0 +1,14 @@
+{
+  "name": "Peta Statistik Indonesia",
+  "short_name": "Peta Statistik",
+  "description": "Peta interaktif statistik per provinsi di Indonesia — populasi, IPM, PDRB, UMP, dan indikator wilayah.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f6fa",
+  "theme_color": "#f4f6fa",
+  "lang": "id",
+  "dir": "ltr",
+  "categories": ["education", "government", "utilities"]
+}

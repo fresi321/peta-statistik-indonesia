@@ -1,0 +1,24 @@
+# Peta Statistik Indonesia — crawl policy
+User-agent: *
+Allow: /
+Allow: /geo/
+Allow: /sitemap.xml
+Allow: /og-image.svg
+Allow: /site.webmanifest
+
+# Block noisy build/tool paths if ever exposed
+Disallow: /api/
+Disallow: /_server/
+Disallow: /node_modules/
+
+Sitemap: https://peta-statistik-indonesia.vercel.app/sitemap.xml
+
+# Popular bots — explicit allow
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /

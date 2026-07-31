@@ -1,0 +1,37 @@
+# dependencies
+node_modules/
+
+# build
+dist/
+.output/
+.vinxi/
+.vercel/
+.nitro/
+.tanstack/
+.wrangler/
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# logs / local
+*.log
+/tmp/
+.DS_Store
+
+# test / agent
+/screenshots/
+/coverage/
+playwright-report/
+test-results/
+
+# editor
+.idea/
+.vscode/
+*.swp
+
+# package lock optional keep
+# package-lock.json is committed
+
+.grok/

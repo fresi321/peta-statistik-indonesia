@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <rect width="1200" height="630" fill="#0a0b0d"/>
+  <rect width="1200" height="630" fill="url(#g)"/>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0a0b0d"/>
+      <stop offset="1" stop-color="#12141a"/>
+    </linearGradient>
+  </defs>
+  <!-- abstract map blobs -->
+  <ellipse cx="820" cy="320" rx="280" ry="160" fill="#134e4a" opacity="0.45"/>
+  <ellipse cx="760" cy="300" rx="120" ry="90" fill="#0f766e" opacity="0.7"/>
+  <ellipse cx="900" cy="340" rx="90" ry="70" fill="#14b8a6" opacity="0.55"/>
+  <ellipse cx="980" cy="280" rx="50" ry="40" fill="#2dd4bf" opacity="0.5"/>
+  <ellipse cx="700" cy="380" rx="70" ry="45" fill="#2dd4bf" opacity="0.35"/>
+  <!-- left copy -->
+  <text x="80" y="210" fill="#8b93a7" font-family="system-ui,Segoe UI,sans-serif" font-size="28" font-weight="500" letter-spacing="4">PETA INTERAKTIF</text>
+  <text x="80" y="290" fill="#eef0f4" font-family="system-ui,Segoe UI,sans-serif" font-size="64" font-weight="700">Peta Statistik</text>
+  <text x="80" y="360" fill="#eef0f4" font-family="system-ui,Segoe UI,sans-serif" font-size="64" font-weight="700">Indonesia</text>
+  <text x="80" y="430" fill="#a1a1aa" font-family="system-ui,Segoe UI,sans-serif" font-size="28">Populasi · IPM · PDRB · Kepadatan per Provinsi</text>
+  <rect x="80" y="480" width="220" height="44" rx="12" fill="#2dd4bf"/>
+  <text x="110" y="509" fill="#042f2e" font-family="system-ui,Segoe UI,sans-serif" font-size="20" font-weight="600">Gratis · 32 Provinsi</text>
+</svg>
