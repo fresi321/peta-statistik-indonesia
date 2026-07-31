@@ -1,0 +1,244 @@
+{
+  "name": "Statistik Provinsi Indonesia — metadata indikator",
+  "processor": "Peta Statistik Indonesia",
+  "updatedAt": "2026-08-01",
+  "license": "https://creativecommons.org/licenses/by/4.0/",
+  "licenseName": "CC BY 4.0",
+  "dualCredit": "Sertakan kredit ganda: sumber asli (instansi) dan Peta Statistik Indonesia sebagai pengolah visualisasi. Ketentuan lisensi data asli tetap berlaku.",
+  "requiredAttribution": "Sumber: BPS, DJPK Kemenkeu, Kemenkes (SSGI), BNPB, KPU, Kemdiktisaintek, BMKG, dan rujukan resmi terkait. Data diolah untuk visualisasi Peta Statistik Indonesia.",
+  "provinceCountOnMap": 38,
+  "nationalProvinceCount": 38,
+  "note": "File ini berisi metadata sumber dan indikator, bukan matriks nilai per provinsi. Unduh CSV/JSON penuh dari UI peta. Batas unit Papua diaproksimasi untuk visualisasi 38 provinsi.",
+  "sources": [
+    {
+      "id": "bps-ipm-2025",
+      "shortName": "BPS IPM 2025",
+      "year": "2025",
+      "reliability": "official",
+      "url": "https://www.bps.go.id/",
+      "fields": ["hdi"],
+      "updateCadence": "Tahunan",
+      "processingNote": "Nilai IPM dipetakan 1:1 ke 38 unit provinsi pada layer GeoJSON; tanpa reskala."
+    },
+    {
+      "id": "bps-pop-midyear",
+      "shortName": "BPS Penduduk",
+      "year": "2024–2025",
+      "reliability": "official",
+      "url": "https://www.bps.go.id/",
+      "fields": ["population", "growth", "density"],
+      "updateCadence": "Tahunan / pertengahan tahun",
+      "processingNote": "Populasi & pertumbuhan dari rilis BPS. Kepadatan dihitung: penduduk ÷ luas wilayah."
+    },
+    {
+      "id": "bps-area",
+      "shortName": "BPS Luas",
+      "year": "2023–2025",
+      "reliability": "official",
+      "url": "https://www.bps.go.id/",
+      "fields": ["area"],
+      "updateCadence": "Insidental / rilis BPS",
+      "processingNote": "Luas daratan (km²) dipetakan per provinsi; dipakai juga sebagai penyebut kepadatan."
+    },
+    {
+      "id": "bps-pdrb",
+      "shortName": "BPS PDRB",
+      "year": "2024",
+      "reliability": "derived",
+      "url": "https://www.bps.go.id/",
+      "fields": ["gdpPerCapita"],
+      "updateCadence": "Tahunan",
+      "processingNote": "PDRB per kapita (juta Rp) diturunkan dari PDRB ADHB ÷ penduduk."
+    },
+    {
+      "id": "bps-poverty",
+      "shortName": "BPS Kemiskinan",
+      "year": "2024–2025",
+      "reliability": "official",
+      "url": "https://www.bps.go.id/",
+      "fields": ["poverty"],
+      "updateCadence": "Semesteran / tahunan",
+      "processingNote": "Persentase P0 dipetakan langsung."
+    },
+    {
+      "id": "bps-tpt",
+      "shortName": "BPS TPT",
+      "year": "2024–2025",
+      "reliability": "official",
+      "url": "https://www.bps.go.id/",
+      "fields": ["unemployment"],
+      "updateCadence": "Semesteran (Sakernas)",
+      "processingNote": "TPT (%) dipetakan 1:1."
+    },
+    {
+      "id": "bps-padi-2024",
+      "shortName": "BPS Padi 2024",
+      "year": "2024",
+      "reliability": "official",
+      "url": "https://www.bps.go.id/",
+      "fields": ["riceProduction"],
+      "updateCadence": "Tahunan",
+      "processingNote": "Produksi padi GKG (ribu ton) dipetakan ke unit provinsi layer 38."
+    },
+    {
+      "id": "disnaker-ump",
+      "shortName": "UMP 2025",
+      "year": "2025",
+      "reliability": "secondary",
+      "url": "https://www.kemnaker.go.id/",
+      "fields": ["ump"],
+      "updateCadence": "Tahunan",
+      "processingNote": "UMP acuan dikompilasi dari rilis Disnaker."
+    },
+    {
+      "id": "bps-inflasi",
+      "shortName": "BPS Inflasi",
+      "year": "2024–2025",
+      "reliability": "official",
+      "url": "https://www.bps.go.id/",
+      "fields": ["inflation"],
+      "updateCadence": "Bulanan (agregat visualisasi)",
+      "processingNote": "Inflasi yoy kota representatif dipetakan per provinsi."
+    },
+    {
+      "id": "bps-gini",
+      "shortName": "BPS Gini",
+      "year": "2024",
+      "reliability": "official",
+      "url": "https://www.bps.go.id/",
+      "fields": ["gini"],
+      "updateCadence": "Tahunan",
+      "processingNote": "Koefisien Gini dipetakan 1:1."
+    },
+    {
+      "id": "bps-ahh",
+      "shortName": "BPS AHH",
+      "year": "2024",
+      "reliability": "official",
+      "url": "https://www.bps.go.id/",
+      "fields": ["lifeExpectancy"],
+      "updateCadence": "Tahunan",
+      "processingNote": "AHH dipetakan per provinsi tanpa penyesuaian."
+    },
+    {
+      "id": "djpk-apbd",
+      "shortName": "DJPK APBD",
+      "year": "2024",
+      "reliability": "derived",
+      "url": "https://djpk.kemenkeu.go.id/portal/data/apbd",
+      "fields": ["apbdPerCapita"],
+      "updateCadence": "Tahunan (APBD)",
+      "processingNote": "Belanja APBD ÷ penduduk untuk perbandingan relatif."
+    },
+    {
+      "id": "djpk-tkdd",
+      "shortName": "DJPK TKDD",
+      "year": "2024 (DJPK TKDD ÷ penduduk)",
+      "reliability": "derived",
+      "url": "https://djpk.kemenkeu.go.id/portal/data/tkdd",
+      "fields": ["tkddPerCapita"],
+      "updateCadence": "Tahunan / portal SIKD",
+      "processingNote": "Total TKDD ÷ penduduk (juta Rp per kapita). Unit Papua dipecah proporsional bila perlu."
+    },
+    {
+      "id": "ssgi-stunting",
+      "shortName": "SSGI Stunting",
+      "year": "2023 (SSGI / pola rilis Kemenkes)",
+      "reliability": "official",
+      "url": "https://dashboard.stunting.go.id/",
+      "fields": ["stunting"],
+      "updateCadence": "Tahunan (SSGI)",
+      "processingNote": "Prevalensi stunting (%) dipetakan ke unit peta; Papua pasca-2022 dipecah proporsional bila perlu."
+    },
+    {
+      "id": "bnpb-bencana",
+      "shortName": "BNPB Bencana",
+      "year": "2023–2024 (BNPB agregat)",
+      "reliability": "official",
+      "url": "https://data.bnpb.go.id/dataset/data-bencana-indonesia",
+      "fields": ["disasterEvents"],
+      "updateCadence": "Tahunan",
+      "processingNote": "Jumlah kejadian bencana per provinsi; bukan indeks risiko."
+    },
+    {
+      "id": "kpu-pemilu",
+      "shortName": "KPU Pemilu",
+      "year": "2024 (KPU DPT & partisipasi Pilpres)",
+      "reliability": "official",
+      "url": "https://opendata.kpu.go.id/",
+      "fields": ["dpt", "voterTurnout"],
+      "updateCadence": "Per siklus pemilu",
+      "processingNote": "DPT ribu jiwa; partisipasi pemilih Pilpres %."
+    },
+    {
+      "id": "kemdiktisaintek-pt",
+      "shortName": "Kemdiktisaintek PT",
+      "year": "2024–2025 (Kemdiktisaintek / pola PDDikti)",
+      "reliability": "official",
+      "url": "https://data.kemdiktisaintek.go.id/",
+      "fields": ["universities"],
+      "updateCadence": "Tahunan",
+      "processingNote": "Total unit PT resmi per provinsi untuk choropleth."
+    },
+    {
+      "id": "bmkg-seismik",
+      "shortName": "BMKG Seismik",
+      "year": "2024 snapshot (agregat seismik BMKG)",
+      "reliability": "secondary",
+      "url": "https://gis.bmkg.go.id/portal",
+      "fields": ["earthquakeEvents"],
+      "updateCadence": "Snapshot tahunan (bukan live)",
+      "processingNote": "Hitungan tahunan gempa signifikan/dirasakan; bukan feed real-time."
+    },
+    {
+      "id": "pddikti-catalog",
+      "shortName": "Katalog PT",
+      "year": "kurasi 2024–2026",
+      "reliability": "secondary",
+      "url": "https://pddikti.kemdiktisaintek.go.id/",
+      "fields": ["schools"],
+      "updateCadence": "Kurasi manual",
+      "processingNote": "Katalog nama panel; schools diestimasi. Total PT dari kemdiktisaintek-pt."
+    },
+    {
+      "id": "rs-catalog",
+      "shortName": "Katalog RS",
+      "year": "kurasi 2024–2026",
+      "reliability": "secondary",
+      "url": "https://sirs.kemkes.go.id/",
+      "fields": ["hospitals", "clinicCount"],
+      "updateCadence": "Kurasi manual",
+      "processingNote": "Hitungan RS/klinik dikurasi."
+    },
+    {
+      "id": "wisata-catalog",
+      "shortName": "Katalog wisata",
+      "year": "kurasi 2024–2026",
+      "reliability": "secondary",
+      "url": "https://www.indonesia.travel/",
+      "fields": ["attractions", "touristArrivals", "hotels"],
+      "updateCadence": "Kurasi manual",
+      "processingNote": "Destinasi/hotel/kunjungan: campuran rilis & kurasi."
+    },
+    {
+      "id": "sector-model",
+      "shortName": "Estimasi model",
+      "year": "model 2024–2025",
+      "reliability": "estimated",
+      "url": "https://www.bps.go.id/",
+      "fields": [
+        "motorcycles",
+        "cars",
+        "roadLength",
+        "livestock",
+        "fishery",
+        "farmland",
+        "literacy",
+        "clinicCount",
+        "schools"
+      ],
+      "updateCadence": "Saat model diperbarui",
+      "processingNote": "Model internal hanya untuk visualisasi."
+    }
+  ]
+}

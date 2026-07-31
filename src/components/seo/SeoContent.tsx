@@ -21,7 +21,7 @@ export function SeoContent() {
         <header className="max-w-3xl">
           <p className="text-xs font-medium uppercase tracking-wider text-accent">
             Data wilayah Indonesia · {DATA_SOURCES.updatedAt} ·{" "}
-            {PROVINCES.length} provinsi
+            {PROVINCES.length} provinsi (nasional 38)
           </p>
           <h2
             id="seo-heading"
@@ -31,8 +31,8 @@ export function SeoContent() {
           </h2>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
             {DATA_SOURCES.requiredAttribution} Peta multi-kategori: demografi,
-            ekonomi, pertanian, kendaraan, pariwisata, kesehatan, dan
-            pendidikan.
+            ekonomi, pertanian, kendaraan, pariwisata, kesehatan (termasuk
+            stunting), pendidikan, bencana & iklim, serta pemilu.
           </p>
         </header>
 
@@ -57,13 +57,27 @@ export function SeoContent() {
 
         <div className="mt-10" id="sumber-data">
           <h3 className="text-lg font-semibold text-fg">
-            Sumber data & atribusi
+            Sumber data & pemrosesan
           </h3>
           <p className="mt-2 rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-relaxed text-fg">
-            {DATA_SOURCES.requiredAttribution}
+            {DATA_SOURCES.requiredAttribution}{" "}
+            <strong>{DATA_SOURCES.dualCreditNote}</strong>
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
+            Diproses oleh {DATA_SOURCES.processorName} · diperbarui{" "}
+            {DATA_SOURCES.updatedAt} · lisensi kemasan {DATA_SOURCES.licenseName}.{" "}
             {DATA_SOURCES.coverageNote}
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Di peta interaktif tersedia unduh CSV/JSON, tabel aksesibel, dan
+            salin sitasi per indikator. Metadata sumber:{" "}
+            <a
+              href="/data/indicators-meta.json"
+              className="text-accent underline-offset-2 hover:underline"
+            >
+              indicators-meta.json
+            </a>
+            .
           </p>
           <ul className="mt-4 space-y-3">
             {DATA_SOURCES.sources.map((s) => (
@@ -80,11 +94,16 @@ export function SeoContent() {
                   {s.name}
                 </a>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {s.year} · {reliabilityLabel(s.reliability)} · kolom:{" "}
-                  {s.fields.join(", ")}
+                  {s.year} · {reliabilityLabel(s.reliability)} ·{" "}
+                  {s.updateCadence} · kolom: {s.fields.join(", ")}
                 </p>
                 <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                  <span className="font-medium text-fg/80">Sitasi: </span>
                   {s.citation}
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  <span className="font-medium text-fg/80">Pemrosesan: </span>
+                  {s.processingNote}
                 </p>
               </li>
             ))}

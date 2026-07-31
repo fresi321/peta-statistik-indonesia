@@ -3,7 +3,9 @@ import {
   DATA_SOURCES,
   METRIC_BY_KEY,
   METRICS,
+  dualCreditLine,
   fullCitationBlock,
+  fullMetricCitation,
   getMetricValue,
   primarySourceForMetric,
   type CategoryKey,
@@ -91,11 +93,19 @@ export function toCsv(
 
   const sourceLines = metricKeys.map((k) => {
     const s = primarySourceForMetric(k);
-    return `# sumber_${k}: ${s.citation}`;
+    return [
+      `# dual_credit_${k}: ${dualCreditLine(k)}`,
+      `# sumber_${k}: ${s.citation}`,
+      `# pemrosesan_${k}: ${s.processingNote}`,
+      `# cadence_${k}: ${s.updateCadence}`,
+    ].join("\n");
   });
 
   const preamble = [
     `# ${DATA_SOURCES.requiredAttribution}`,
+    `# ${DATA_SOURCES.dualCreditNote}`,
+    `# processor: ${DATA_SOURCES.processorName}`,
+    `# license: ${DATA_SOURCES.licenseName} ${DATA_SOURCES.licenseUrl}`,
     `# diperbarui: ${DATA_SOURCES.updatedAt}`,
     `# ${DATA_SOURCES.disclaimer}`,
     `# kolom *_nama berisi daftar entitas terkurasi per provinsi`,
@@ -117,9 +127,14 @@ export function toJson(
 ): string {
   const payload = {
     exportedAt: new Date().toISOString(),
-    source: "Peta Statistik Indonesia",
+    source: DATA_SOURCES.processorName,
     dataUpdatedAt: DATA_SOURCES.updatedAt,
     requiredAttribution: DATA_SOURCES.requiredAttribution,
+    dualCreditNote: DATA_SOURCES.dualCreditNote,
+    license: {
+      name: DATA_SOURCES.licenseName,
+      url: DATA_SOURCES.licenseUrl,
+    },
     citationBlock: fullCitationBlock(),
     attribution: DATA_SOURCES.sources.map((s) => ({
       name: s.name,
@@ -128,6 +143,9 @@ export function toJson(
       year: s.year,
       reliability: s.reliability,
       citation: s.citation,
+      processingNote: s.processingNote,
+      updateCadence: s.updateCadence,
+      lastIngestedAt: s.lastIngestedAt,
       fields: s.fields,
     })),
     metricSources: metricKeys.map((k) => {
@@ -137,8 +155,12 @@ export function toJson(
         label: METRIC_BY_KEY[k].label,
         source: s.shortName,
         citation: s.citation,
+        dualCredit: dualCreditLine(k),
+        fullCitation: fullMetricCitation(k),
         year: s.year,
         reliability: s.reliability,
+        processingNote: s.processingNote,
+        updateCadence: s.updateCadence,
         url: s.url,
       };
     }),

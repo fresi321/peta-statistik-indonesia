@@ -776,47 +776,107 @@ const BASE: Record<string, ProvinceEntities> = {
     universities: list(
       [
         { name: "Universitas Papua", type: "Negeri", city: "Manokwari" },
-        { name: "STAIN Sorong / IAIN", type: "Negeri (Kemenag)", city: "Sorong" },
-        { name: "Universitas Muhammadiyah Papua Barat", type: "Swasta", city: "Sorong" }
+        { name: "Poltekkes Manokwari", type: "Negeri", city: "Manokwari" },
       ],
-      { total: 10, sourceNote: notePddikti },
+      { total: 6, sourceNote: notePddikti },
     ),
     hospitals: list(
-      [
-        { name: "RSUD Manokwari", type: "RSUD Provinsi", city: "Manokwari" },
-        { name: "RSUD Sele Be Solu", type: "RSUD", city: "Sorong" }
-      ],
-      { total: 16, sourceNote: noteKemenkes },
+      [{ name: "RSUD Manokwari", type: "RSUD Provinsi", city: "Manokwari" }],
+      { total: 8, sourceNote: noteKemenkes },
     ),
     attractions: list([], { sourceNote: noteWisata }),
     commodities: list(
       [
         { name: "Minyak & gas", type: "Energi" },
         { name: "Perikanan", type: "Perikanan" },
-        { name: "Pariwisata Raja Ampat", type: "Jasa" },
-        { name: "Hasil hutan", type: "Hutan" }
+        { name: "Hasil hutan", type: "Hutan" },
       ],
       { sourceNote: noteKomoditas },
     ),
   },
-  "PAPUA": {
+  "PAPUA BARAT DAYA": {
+    geoKey: "PAPUA BARAT DAYA",
+    universities: list(
+      [
+        { name: "STAIN / IAIN Sorong", type: "Negeri (Kemenag)", city: "Sorong" },
+        { name: "Universitas Muhammadiyah Sorong", type: "Swasta", city: "Sorong" },
+      ],
+      { total: 5, sourceNote: notePddikti },
+    ),
+    hospitals: list(
+      [{ name: "RSUD Sele Be Solu", type: "RSUD", city: "Sorong" }],
+      { total: 9, sourceNote: noteKemenkes },
+    ),
+    attractions: list([], { sourceNote: noteWisata }),
+    commodities: list(
+      [
+        { name: "Pariwisata Raja Ampat", type: "Jasa" },
+        { name: "Perikanan", type: "Perikanan" },
+        { name: "Minyak & gas", type: "Energi" },
+      ],
+      { sourceNote: noteKomoditas },
+    ),
+  },
+  PAPUA: {
     geoKey: "PAPUA",
     universities: list(
       [
         { name: "Universitas Cenderawasih", type: "Negeri", city: "Jayapura" },
         { name: "UIN Jayapura / IAIN", type: "Negeri (Kemenag)", city: "Jayapura" },
         { name: "Universitas Ottow Geissler", type: "Swasta", city: "Jayapura" },
-        { name: "Poltekkes Kemenkes Jayapura", type: "Negeri", city: "Jayapura" }
+        { name: "Poltekkes Kemenkes Jayapura", type: "Negeri", city: "Jayapura" },
       ],
-      { total: 15, sourceNote: notePddikti },
+      { total: 12, sourceNote: notePddikti },
     ),
     hospitals: list(
       [
         { name: "RSUD Dok II Jayapura", type: "RSUD Provinsi", city: "Jayapura" },
         { name: "RS Dian Harapan", type: "Swasta", city: "Jayapura" },
-        { name: "RSUD Mimika", type: "RSUD", city: "Timika" }
       ],
-      { total: 30, sourceNote: noteKemenkes },
+      { total: 16, sourceNote: noteKemenkes },
+    ),
+    attractions: list([], { sourceNote: noteWisata }),
+    commodities: list(
+      [
+        { name: "Perikanan", type: "Perikanan" },
+        { name: "Hasil hutan", type: "Hutan" },
+        { name: "Sagu", type: "Pangan" },
+      ],
+      { sourceNote: noteKomoditas },
+    ),
+  },
+  "PAPUA SELATAN": {
+    geoKey: "PAPUA SELATAN",
+    universities: list(
+      [{ name: "Kampus / STIPER Merauke", type: "Swasta", city: "Merauke" }],
+      { total: 3, sourceNote: notePddikti },
+    ),
+    hospitals: list(
+      [{ name: "RSUD Merauke", type: "RSUD", city: "Merauke" }],
+      { total: 6, sourceNote: noteKemenkes },
+    ),
+    attractions: list([], { sourceNote: noteWisata }),
+    commodities: list(
+      [
+        { name: "Padi Merauke", type: "Pangan" },
+        { name: "Perikanan", type: "Perikanan" },
+        { name: "Sagu", type: "Pangan" },
+      ],
+      { sourceNote: noteKomoditas },
+    ),
+  },
+  "PAPUA TENGAH": {
+    geoKey: "PAPUA TENGAH",
+    universities: list(
+      [{ name: "Universitas di Nabire / Mimika (kurasi)", type: "Swasta", city: "Nabire" }],
+      { total: 4, sourceNote: notePddikti },
+    ),
+    hospitals: list(
+      [
+        { name: "RSUD Nabire", type: "RSUD", city: "Nabire" },
+        { name: "RSUD Mimika", type: "RSUD", city: "Timika" },
+      ],
+      { total: 10, sourceNote: noteKemenkes },
     ),
     attractions: list([], { sourceNote: noteWisata }),
     commodities: list(
@@ -824,7 +884,26 @@ const BASE: Record<string, ProvinceEntities> = {
         { name: "Tembaga & emas", type: "Tambang" },
         { name: "Hasil hutan", type: "Hutan" },
         { name: "Perikanan", type: "Perikanan" },
-        { name: "Sagu", type: "Pangan" }
+      ],
+      { sourceNote: noteKomoditas },
+    ),
+  },
+  "PAPUA PEGUNUNGAN": {
+    geoKey: "PAPUA PEGUNUNGAN",
+    universities: list(
+      [{ name: "STKIP / kampus Wamena (kurasi)", type: "Swasta", city: "Wamena" }],
+      { total: 3, sourceNote: notePddikti },
+    ),
+    hospitals: list(
+      [{ name: "RSUD Wamena", type: "RSUD", city: "Wamena" }],
+      { total: 7, sourceNote: noteKemenkes },
+    ),
+    attractions: list([], { sourceNote: noteWisata }),
+    commodities: list(
+      [
+        { name: "Ubi / pertanian pegunungan", type: "Pangan" },
+        { name: "Kopi Wamena", type: "Perkebunan" },
+        { name: "Budaya & wisata Lembah Baliem", type: "Jasa" },
       ],
       { sourceNote: noteKomoditas },
     ),

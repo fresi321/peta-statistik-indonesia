@@ -4,7 +4,7 @@ Peta interaktif statistik per provinsi di Indonesia — demografi, ekonomi (UMP,
 
 ## Fitur
 
-- Choropleth map 34 provinsi (skala biru → merah)
+- Choropleth map 38 provinsi (termasuk pemekaran Papua 2022; skala biru → merah / colorblind)
 - Multi-kategori & pencarian indikator
 - Panel detail + katalog nama (PT, RS, destinasi)
 - Unduh data CSV/JSON dengan atribusi sumber

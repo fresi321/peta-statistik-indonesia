@@ -243,19 +243,47 @@ export const PHASE_A_BY_GEO: Record<string, PhaseAMetrics> = {
     "apbdPerCapita": 12.4
   },
   "PAPUA BARAT": {
-    "ump": 3600,
-    "inflation": 2.7,
-    "gini": 0.385,
-    "lifeExpectancy": 67.2,
-    "apbdPerCapita": 18.6
+    ump: 3580,
+    inflation: 2.6,
+    gini: 0.378,
+    lifeExpectancy: 67.8,
+    apbdPerCapita: 17.2,
   },
-  "PAPUA": {
-    "ump": 4326,
-    "inflation": 3.1,
-    "gini": 0.392,
-    "lifeExpectancy": 66.4,
-    "apbdPerCapita": 15.8
-  }
+  "PAPUA BARAT DAYA": {
+    ump: 3620,
+    inflation: 2.8,
+    gini: 0.382,
+    lifeExpectancy: 67.0,
+    apbdPerCapita: 16.8,
+  },
+  PAPUA: {
+    ump: 4280,
+    inflation: 2.9,
+    gini: 0.388,
+    lifeExpectancy: 66.9,
+    apbdPerCapita: 14.5,
+  },
+  "PAPUA SELATAN": {
+    ump: 4100,
+    inflation: 3.0,
+    gini: 0.375,
+    lifeExpectancy: 65.8,
+    apbdPerCapita: 13.2,
+  },
+  "PAPUA TENGAH": {
+    ump: 4350,
+    inflation: 3.1,
+    gini: 0.395,
+    lifeExpectancy: 65.2,
+    apbdPerCapita: 16.4,
+  },
+  "PAPUA PEGUNUNGAN": {
+    ump: 4020,
+    inflation: 3.2,
+    gini: 0.402,
+    lifeExpectancy: 64.1,
+    apbdPerCapita: 12.8,
+  },
 };
 
 export const PHASE_A_META = {

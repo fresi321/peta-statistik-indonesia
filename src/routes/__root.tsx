@@ -12,6 +12,7 @@ import {
   defaultMeta,
   buildWebAppJsonLd,
   buildDatasetJsonLd,
+  buildWebPageJsonLd,
   buildFaqJsonLd,
   buildBreadcrumbJsonLd,
   buildProvinceItemListJsonLd,
@@ -44,6 +45,7 @@ export const Route = createRootRoute({
     ],
     scripts: [
       jsonLdScript(buildWebAppJsonLd()),
+      jsonLdScript(buildWebPageJsonLd()),
       jsonLdScript(buildDatasetJsonLd()),
       jsonLdScript(buildFaqJsonLd()),
       jsonLdScript(buildBreadcrumbJsonLd()),

@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   ArrowDownWideNarrow,
   ArrowUpNarrowWide,
@@ -6,17 +13,14 @@ import {
   List,
   Map as MapIcon,
   Search,
+  Table2,
   X,
 } from "lucide-react";
 import { ClientOnly } from "@tanstack/react-router";
-import {
-  DataAttribution,
-  MetricSourceLine,
-} from "@/components/map/DataAttribution";
-import { DownloadMenu } from "@/components/map/DownloadMenu";
-import { IndonesiaMap } from "@/components/map/IndonesiaMap";
+import { DataAttribution } from "@/components/map/DataAttribution";
+import { DataFreshnessBadge } from "@/components/map/DataFreshnessBadge";
+import { ChoroplethLegend } from "@/components/map/ChoroplethLegend";
 import { MetricPicker, QUICK_METRICS } from "@/components/map/MetricPicker";
-import { StatsPanel } from "@/components/map/StatsPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -26,18 +30,89 @@ import {
   PROVINCES,
   getCategory,
   getMetricValue,
-  metricRange,
   metricsForCategory,
-  choroplethColor,
-  choroplethLegendGradient,
-  normalize,
   type CategoryKey,
   type MetricKey,
   type ProvinceStats,
 } from "@/data/province-stats";
+import {
+  PALETTE_STORAGE_KEY,
+  type PaletteMode,
+} from "@/lib/map-colors";
+import {
+  buildMetricSummary,
+  buildPreviewStats,
+} from "@/lib/map-legend";
+import { mapColorForValue } from "@/lib/map-scale";
+import { warmMapAssets } from "@/lib/prefetch-geo";
 import { cn } from "@/lib/utils";
 
+/** Heavy chunks — Leaflet / Recharts / dialogs — code-split from shell */
+const IndonesiaMap = lazy(() =>
+  import("@/components/map/IndonesiaMap").then((m) => ({
+    default: m.IndonesiaMap,
+  })),
+);
+const StatsPanel = lazy(() =>
+  import("@/components/map/StatsPanel").then((m) => ({
+    default: m.StatsPanel,
+  })),
+);
+const AccessibleDataTable = lazy(() =>
+  import("@/components/map/AccessibleDataTable").then((m) => ({
+    default: m.AccessibleDataTable,
+  })),
+);
+const DownloadMenu = lazy(() =>
+  import("@/components/map/DownloadMenu").then((m) => ({
+    default: m.DownloadMenu,
+  })),
+);
+
+function MapChunkFallback() {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 bg-bg px-6 text-center">
+      <div
+        className="size-8 animate-pulse rounded-full border-2 border-accent/30 border-t-accent"
+        aria-hidden
+      />
+      <p className="text-sm font-medium text-fg">Memuat peta…</p>
+      <p className="text-[11px] text-muted-foreground">
+        Modul peta & batas provinsi
+      </p>
+    </div>
+  );
+}
+
+function PanelChunkFallback({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-center text-xs text-muted-foreground",
+        className,
+      )}
+    >
+      Memuat panel…
+    </div>
+  );
+}
+
 const GUIDE_KEY = "psi_data_guide_dismissed_v1";
+
+function isXlViewport() {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(min-width: 1280px)").matches;
+}
+
+function readPaletteMode(): PaletteMode {
+  try {
+    const v = localStorage.getItem(PALETTE_STORAGE_KEY);
+    if (v === "colorblind" || v === "default") return v;
+  } catch {
+    /* ignore */
+  }
+  return "default";
+}
 
 export function MapApp() {
   const [category, setCategory] = useState<CategoryKey>("ekonomi");
@@ -49,14 +124,29 @@ export function MapApp() {
   const [listOpen, setListOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
+  const [tableOpen, setTableOpen] = useState(false);
   const [mobileStatsOpen, setMobileStatsOpen] = useState(false);
   const [sortAsc, setSortAsc] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [legendClass, setLegendClass] = useState<number | null>(null);
+  const [legendHoverClass, setLegendHoverClass] = useState<number | null>(
+    null,
+  );
+  const [palette, setPalette] = useState<PaletteMode>("default");
 
   const activeCategory = getCategory(category);
   const categoryMetrics = metricsForCategory(category);
   const activeMetric = METRIC_BY_KEY[metric];
-  const range = metricRange(metric);
+  const metricSummary = useMemo(() => buildMetricSummary(metric), [metric]);
+
+  useEffect(() => {
+    setPalette(readPaletteMode());
+  }, []);
+
+  // Prefetch Leaflet chunk + GeoJSON while chrome paints
+  useEffect(() => {
+    warmMapAssets();
+  }, []);
 
   useEffect(() => {
     try {
@@ -69,6 +159,20 @@ export function MapApp() {
   useEffect(() => {
     setSortAsc(!activeMetric.higherIsBetter);
   }, [metric, activeMetric.higherIsBetter]);
+
+  useEffect(() => {
+    setLegendClass(null);
+    setLegendHoverClass(null);
+  }, [metric]);
+
+  const setPalettePersist = (mode: PaletteMode) => {
+    setPalette(mode);
+    try {
+      localStorage.setItem(PALETTE_STORAGE_KEY, mode);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const selectCategory = (key: CategoryKey) => {
     const cat = getCategory(key);
@@ -116,21 +220,54 @@ export function MapApp() {
     return list;
   }, [query, metric, sortAsc]);
 
-  const handleSelect = (geoKey: string | null, stats: ProvinceStats | null) => {
+  const handleMapSelect = (
+    geoKey: string | null,
+    stats: ProvinceStats | null,
+  ) => {
     setSelectedKey(geoKey);
     setSelected(stats);
     if (stats) {
-      setMobileStatsOpen(true);
       setListOpen(false);
+      if (isXlViewport()) {
+        setMobileStatsOpen(true);
+      } else {
+        setMobileStatsOpen(false);
+      }
     } else {
       setMobileStatsOpen(false);
     }
   };
 
+  const handleListSelect = (p: ProvinceStats) => {
+    setSelectedKey(p.geoKey);
+    setSelected(p);
+    setListOpen(false);
+    setMobileStatsOpen(true);
+  };
+
+  const openDetailFromCard = () => {
+    const target = hovered ?? selected;
+    if (!target) return;
+    setSelectedKey(target.geoKey);
+    setSelected(target);
+    setMobileStatsOpen(true);
+  };
+
   const display = hovered ?? selected;
+  const preview = display ? buildPreviewStats(display, metric) : null;
 
   return (
     <div className="app-shell relative flex h-full w-full flex-col overflow-hidden">
+      {/* Screen-reader live summary — not color-only access to the map story */}
+      <div
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {metricSummary}
+      </div>
+
       <header className="z-30 flex shrink-0 items-center gap-2 border-b border-border bg-surface/95 px-2.5 py-2 backdrop-blur-md sm:gap-3 sm:px-5 sm:py-2.5">
         <div className="hidden min-w-0 items-center gap-2 sm:flex">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border bg-surface-elevated">
@@ -140,9 +277,14 @@ export function MapApp() {
             <h1 className="truncate font-display text-sm font-semibold tracking-tight text-fg sm:text-base">
               Peta Statistik
             </h1>
-            <p className="hidden truncate text-[11px] text-muted-foreground md:block">
-              {DATA_SOURCES.updatedAt}
-            </p>
+            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+              <span className="hidden rounded-md border border-border bg-surface-elevated px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground sm:inline">
+                {DATA_SOURCES.provinceCount} provinsi
+              </span>
+              <div className="hidden md:block">
+                <DataFreshnessBadge metric={metric} compact />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -153,15 +295,24 @@ export function MapApp() {
             category={category}
             metric={metric}
             onSelect={selectData}
-            triggerClassName="h-11 w-full max-w-none sm:h-9"
+            triggerClassName="h-11 w-full max-w-none"
           />
         </div>
 
         <div className="hidden shrink-0 items-center gap-1.5 sm:flex">
           <Button
             variant="secondary"
-            size="sm"
-            className="gap-1.5"
+            size="default"
+            className="min-h-11 gap-1.5 px-3"
+            onClick={() => setTableOpen(true)}
+          >
+            <Table2 className="size-3.5 text-accent" aria-hidden />
+            <span className="hidden lg:inline">Tabel</span>
+          </Button>
+          <Button
+            variant="secondary"
+            size="default"
+            className="min-h-11 gap-1.5 px-3"
             onClick={() => setDownloadOpen(true)}
           >
             <Download className="size-3.5 text-accent" aria-hidden />
@@ -169,8 +320,8 @@ export function MapApp() {
           </Button>
           <Button
             variant="secondary"
-            size="sm"
-            className="lg:hidden"
+            size="default"
+            className="min-h-11 min-w-11 lg:hidden"
             onClick={() => setListOpen(true)}
             aria-label="Daftar & cari provinsi"
           >
@@ -185,7 +336,8 @@ export function MapApp() {
           <div className="flex items-center gap-2">
             <div className="min-w-0 flex-1">
               <p className="text-xs font-semibold text-fg sm:text-sm">
-                Ketuk data di atas, lalu ketuk provinsi di peta
+                38 provinsi · pilih data, ketuk peta, lalu ketuk kartu untuk
+                detail
               </p>
               <div className="mt-1.5 flex gap-1.5 overflow-x-auto pb-0.5 sm:flex-wrap sm:overflow-visible">
                 {QUICK_METRICS.slice(0, 4).map((item) => (
@@ -199,7 +351,7 @@ export function MapApp() {
                         item.key,
                       )
                     }
-                    className="min-h-9 shrink-0 rounded-full border border-border bg-surface px-3 text-xs font-medium text-fg active:bg-muted"
+                    className="min-h-11 shrink-0 rounded-full border border-border bg-surface px-3 text-xs font-medium text-fg active:bg-muted"
                   >
                     {METRIC_BY_KEY[item.key].short}
                   </button>
@@ -207,7 +359,7 @@ export function MapApp() {
                 <button
                   type="button"
                   onClick={() => setPickerOpen(true)}
-                  className="min-h-9 shrink-0 rounded-full border border-accent/30 bg-accent/10 px-3 text-xs font-medium text-accent"
+                  className="min-h-11 shrink-0 rounded-full border border-accent/30 bg-accent/10 px-3 text-xs font-medium text-accent"
                 >
                   Lainnya…
                 </button>
@@ -216,7 +368,7 @@ export function MapApp() {
             <Button
               variant="ghost"
               size="icon"
-              className="size-10 shrink-0"
+              className="size-11 shrink-0"
               onClick={dismissGuide}
               aria-label="Tutup panduan"
             >
@@ -241,7 +393,7 @@ export function MapApp() {
               title={c.description}
               onClick={() => selectCategory(c.key)}
               className={cn(
-                "shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                "min-h-11 shrink-0 rounded-full border px-3.5 py-2 text-xs font-medium transition-colors",
                 c.key === category
                   ? "border-accent/40 bg-accent/15 text-accent"
                   : "border-border bg-surface-elevated text-muted-foreground hover:text-fg",
@@ -265,7 +417,7 @@ export function MapApp() {
               title={m.description}
               onClick={() => setMetric(m.key)}
               className={cn(
-                "shrink-0 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                "min-h-11 shrink-0 rounded-md px-3 py-2 text-xs font-medium transition-colors",
                 m.key === metric
                   ? "bg-surface-elevated text-fg shadow-sm ring-1 ring-border"
                   : "text-muted-foreground hover:bg-muted/60 hover:text-fg",
@@ -290,9 +442,11 @@ export function MapApp() {
             categoryLabel={activeCategory.short}
             selectedKey={selectedKey}
             sortAsc={sortAsc}
+            palette={palette}
             onToggleSort={() => setSortAsc((v) => !v)}
-            onSelect={(p) => handleSelect(p.geoKey, p)}
+            onSelect={handleListSelect}
             onOpenDataPicker={() => setPickerOpen(true)}
+            onOpenTable={() => setTableOpen(true)}
           />
         </aside>
 
@@ -301,76 +455,72 @@ export function MapApp() {
           role="region"
           aria-label={`Peta ${activeCategory.label} — ${activeMetric.label}`}
         >
-          <ClientOnly
-            fallback={
-              <div className="flex h-full flex-col items-center justify-center gap-2 bg-bg px-6 text-center">
-                <p className="text-sm font-medium text-fg">Memuat peta…</p>
-              </div>
-            }
-          >
-            <IndonesiaMap
-              metric={metric}
-              selectedKey={selectedKey}
-              onSelect={handleSelect}
-              onHover={setHovered}
-            />
+          <ClientOnly fallback={<MapChunkFallback />}>
+            <Suspense fallback={<MapChunkFallback />}>
+              <IndonesiaMap
+                metric={metric}
+                selectedKey={selectedKey}
+                legendClass={legendClass}
+                legendHoverClass={legendHoverClass}
+                palette={palette}
+                onSelect={handleMapSelect}
+                onHover={setHovered}
+              />
+            </Suspense>
           </ClientOnly>
 
-          <div className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex flex-col gap-1.5 px-2 sm:bottom-4 sm:left-4 sm:right-auto sm:max-w-xs sm:px-0">
-            {display && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-2 z-20 flex flex-col gap-1.5 px-2 sm:bottom-4 sm:left-4 sm:right-auto sm:max-w-sm sm:px-0">
+            {preview && (
               <button
                 type="button"
-                className="pointer-events-auto rounded-xl border border-border bg-surface/95 px-3 py-2 text-left shadow-lg backdrop-blur-md active:bg-muted/40 md:pointer-events-none"
-                onClick={() => {
-                  setSelectedKey(display.geoKey);
-                  setSelected(display);
-                  setMobileStatsOpen(true);
-                }}
+                className="pointer-events-auto rounded-xl border border-border bg-surface/95 px-3 py-2.5 text-left shadow-lg backdrop-blur-md active:bg-muted/40 xl:cursor-default xl:active:bg-surface/95"
+                onClick={openDetailFromCard}
               >
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-fg">
-                      {display.name}
+                      {preview.name}
                     </p>
                     <p className="truncate text-[11px] text-muted-foreground">
-                      {activeMetric.short} · ketuk untuk detail
+                      {preview.metricShort}
+                      {preview.unit ? ` · ${preview.unit}` : ""}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      Peringkat {preview.rank}/{preview.total}
+                      {!preview.higherIsBetter && (
+                        <span>
+                          {" "}
+                          · lebih rendah lebih baik
+                        </span>
+                      )}
+                    </p>
+                    {preview.vsMeanLabel && (
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">
+                        {preview.vsMeanLabel}
+                      </p>
+                    )}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="font-mono text-base font-medium tabular-nums text-fg">
+                      {preview.valueLabel}
+                    </p>
+                    <p className="mt-0.5 text-[10px] font-medium text-accent xl:hidden">
+                      Ketuk untuk detail
                     </p>
                   </div>
-                  <p className="shrink-0 font-mono text-base font-medium tabular-nums text-fg">
-                    {activeMetric.format(getMetricValue(display, metric))}
-                  </p>
                 </div>
               </button>
             )}
 
-            <div className="pointer-events-auto rounded-xl border border-border bg-surface/95 px-3 py-2 shadow-lg backdrop-blur-md">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-medium text-muted-foreground">
-                  Biru
-                </span>
-                <div
-                  className="h-2 min-w-0 flex-1 rounded-full"
-                  style={{
-                    background: choroplethLegendGradient(
-                      activeMetric.higherIsBetter,
-                    ),
-                  }}
-                />
-                <span className="text-[10px] font-medium text-muted-foreground">
-                  Merah
-                </span>
-              </div>
-              <div className="mt-1 flex justify-between font-mono text-[10px] tabular-nums text-muted-foreground">
-                <span>{activeMetric.format(range.min)}</span>
-                <span className="font-sans text-[10px] text-fg">
-                  {activeMetric.short}
-                </span>
-                <span>{activeMetric.format(range.max)}</span>
-              </div>
-              <div className="mt-1 hidden sm:block">
-                <MetricSourceLine metric={metric} />
-              </div>
-            </div>
+            <ChoroplethLegend
+              metric={metric}
+              activeClass={legendClass}
+              hoveredClass={legendHoverClass}
+              onActiveClassChange={setLegendClass}
+              onHoveredClassChange={setLegendHoverClass}
+              palette={palette}
+              onPaletteChange={setPalettePersist}
+            />
 
             <div className="hidden justify-end sm:flex">
               <DataAttribution metric={metric} />
@@ -378,20 +528,26 @@ export function MapApp() {
           </div>
         </div>
 
-        <StatsPanel
-          province={selected}
-          metric={metric}
-          category={category}
-          onClose={() => handleSelect(null, null)}
-          className="hidden w-[360px] shrink-0 xl:flex"
-        />
+        <Suspense
+          fallback={
+            <PanelChunkFallback className="hidden w-[360px] shrink-0 border-l border-border xl:flex" />
+          }
+        >
+          <StatsPanel
+            province={selected}
+            metric={metric}
+            category={category}
+            onClose={() => handleMapSelect(null, null)}
+            className="hidden w-[360px] shrink-0 xl:flex"
+          />
+        </Suspense>
       </div>
 
       <nav
         className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
         aria-label="Navigasi utama"
       >
-        <div className="grid grid-cols-3">
+        <div className="grid grid-cols-4">
           <DockBtn
             label="Data"
             icon={<Search className="size-5" />}
@@ -405,6 +561,12 @@ export function MapApp() {
             onClick={() => setListOpen(true)}
           />
           <DockBtn
+            label="Tabel"
+            icon={<Table2 className="size-5" />}
+            active={tableOpen}
+            onClick={() => setTableOpen(true)}
+          />
+          <DockBtn
             label="Unduh"
             icon={<Download className="size-5" />}
             active={downloadOpen}
@@ -413,15 +575,34 @@ export function MapApp() {
         </div>
       </nav>
 
-      <DownloadMenu
-        filtered={filtered}
-        all={PROVINCES}
-        category={category}
-        metric={metric}
-        open={downloadOpen}
-        onOpenChange={setDownloadOpen}
-        hideTrigger
-      />
+      {downloadOpen && (
+        <Suspense fallback={null}>
+          <DownloadMenu
+            filtered={filtered}
+            all={PROVINCES}
+            category={category}
+            metric={metric}
+            open={downloadOpen}
+            onOpenChange={setDownloadOpen}
+            hideTrigger
+          />
+        </Suspense>
+      )}
+
+      {tableOpen && (
+        <Suspense fallback={null}>
+          <AccessibleDataTable
+            open={tableOpen}
+            onOpenChange={setTableOpen}
+            rows={filtered}
+            metric={metric}
+            palette={palette}
+            selectedKey={selectedKey}
+            onSelect={handleListSelect}
+            hideTrigger
+          />
+        </Suspense>
+      )}
 
       {listOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
@@ -443,7 +624,7 @@ export function MapApp() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-10"
+                className="size-11"
                 onClick={() => setListOpen(false)}
                 aria-label="Tutup"
               >
@@ -458,11 +639,16 @@ export function MapApp() {
               categoryLabel={activeCategory.short}
               selectedKey={selectedKey}
               sortAsc={sortAsc}
+              palette={palette}
               onToggleSort={() => setSortAsc((v) => !v)}
-              onSelect={(p) => handleSelect(p.geoKey, p)}
+              onSelect={handleListSelect}
               onOpenDataPicker={() => {
                 setListOpen(false);
                 setPickerOpen(true);
+              }}
+              onOpenTable={() => {
+                setListOpen(false);
+                setTableOpen(true);
               }}
             />
           </div>
@@ -479,13 +665,19 @@ export function MapApp() {
           />
           <div className="absolute bottom-0 left-0 right-0 flex h-[min(78dvh,36rem)] flex-col overflow-hidden rounded-t-2xl border border-border bg-surface shadow-2xl">
             <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border" />
-            <StatsPanel
-              province={selected}
-              metric={metric}
-              category={category}
-              onClose={() => handleSelect(null, null)}
-              className="border-l-0"
-            />
+            <Suspense
+              fallback={
+                <PanelChunkFallback className="min-h-[12rem] flex-1" />
+              }
+            >
+              <StatsPanel
+                province={selected}
+                metric={metric}
+                category={category}
+                onClose={() => handleMapSelect(null, null)}
+                className="border-l-0"
+              />
+            </Suspense>
           </div>
         </div>
       )}
@@ -534,9 +726,11 @@ function ProvinceList({
   categoryLabel,
   selectedKey,
   sortAsc,
+  palette,
   onToggleSort,
   onSelect,
   onOpenDataPicker,
+  onOpenTable,
 }: {
   query: string;
   onQuery: (q: string) => void;
@@ -545,12 +739,13 @@ function ProvinceList({
   categoryLabel: string;
   selectedKey: string | null;
   sortAsc: boolean;
+  palette: PaletteMode;
   onToggleSort: () => void;
   onSelect: (p: ProvinceStats) => void;
   onOpenDataPicker: () => void;
+  onOpenTable: () => void;
 }) {
   const m = METRIC_BY_KEY[metric];
-  const range = metricRange(metric);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -563,9 +758,9 @@ function ProvinceList({
           <Input
             value={query}
             onChange={(e) => onQuery(e.target.value)}
-            placeholder="Cari nama / ibu kota…"
+            placeholder="Cari provinsi, ibu kota, wilayah…"
             className="h-11 pl-9"
-            aria-label="Filter provinsi"
+            aria-label="Filter provinsi (38 wilayah)"
           />
         </div>
         <div className="mt-2 flex items-center justify-between gap-2">
@@ -575,7 +770,7 @@ function ProvinceList({
           <button
             type="button"
             onClick={onToggleSort}
-            className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-md border border-border px-2.5 text-xs font-medium text-muted-foreground active:text-fg"
+            className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-md border border-border px-2.5 text-xs font-medium text-muted-foreground active:text-fg"
           >
             {sortAsc ? (
               <ArrowUpNarrowWide className="size-3.5" />
@@ -588,17 +783,24 @@ function ProvinceList({
         <button
           type="button"
           onClick={onOpenDataPicker}
-          className="mt-2 min-h-10 w-full rounded-lg border border-dashed border-border px-2.5 py-2 text-left text-[11px] text-muted-foreground active:border-accent/40 active:text-accent"
+          className="mt-2 min-h-11 w-full rounded-lg border border-dashed border-border px-2.5 py-2 text-left text-[11px] text-muted-foreground active:border-accent/40 active:text-accent"
         >
           Data: <span className="font-medium text-fg">{m.label}</span> (
           {categoryLabel})
         </button>
+        <button
+          type="button"
+          onClick={onOpenTable}
+          className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface-elevated text-xs font-medium text-muted-foreground active:text-fg"
+        >
+          <Table2 className="size-3.5 text-accent" aria-hidden />
+          Buka tabel data (aksesibel)
+        </button>
       </div>
       <div className="panel-scroll flex-1 overflow-y-auto overscroll-contain">
-        <ul className="p-2">
+        <ul className="p-2" aria-label={`Daftar provinsi menurut ${m.short}`}>
           {filtered.map((p, i) => {
             const val = getMetricValue(p, metric);
-            const t = normalize(val, range.min, range.max);
             const active = selectedKey === p.geoKey;
             return (
               <li key={p.geoKey}>
@@ -618,7 +820,7 @@ function ProvinceList({
                   <span
                     className="size-2.5 shrink-0 rounded-full"
                     style={{
-                      background: choroplethColor(t, m.higherIsBetter),
+                      background: mapColorForValue(val, metric, palette),
                     }}
                     aria-hidden
                   />

@@ -1,15 +1,16 @@
 import { useState } from "react";
 import { BookOpen, ChevronDown, ExternalLink } from "lucide-react";
+import { SourceProcessingBlock } from "@/components/map/SourceProcessingBlock";
 import {
   DATA_SOURCES,
+  dualCreditLine,
   primarySourceForMetric,
   reliabilityLabel,
-  shortAttribution,
   type MetricKey,
 } from "@/data/province-stats";
 import { cn } from "@/lib/utils";
 
-/** Compact always-visible source line for the active metric. */
+/** Compact always-visible dual-credit line for the active metric. */
 export function MetricSourceLine({
   metric,
   className,
@@ -25,7 +26,7 @@ export function MetricSourceLine({
         className,
       )}
     >
-      <span className="font-medium text-fg/80">Sumber: </span>
+      <span className="font-medium text-fg/80">Diproses dari </span>
       <a
         href={src.url}
         target="_blank"
@@ -36,7 +37,8 @@ export function MetricSourceLine({
       </a>
       <span>
         {" "}
-        ({src.year} · {reliabilityLabel(src.reliability)})
+        ({src.year} · {reliabilityLabel(src.reliability)}) ·{" "}
+        {DATA_SOURCES.processorName}
       </span>
     </p>
   );
@@ -57,14 +59,14 @@ export function DataAttribution({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex max-w-full items-center gap-1.5 rounded-lg border border-border bg-surface/95 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground shadow-md backdrop-blur-md transition-colors hover:text-fg"
+        className="flex min-h-11 max-w-full items-center gap-1.5 rounded-lg border border-border bg-surface/95 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground shadow-md backdrop-blur-md transition-colors hover:text-fg sm:min-h-9"
         aria-expanded={open}
       >
         <BookOpen className="size-3 shrink-0 text-accent" aria-hidden />
         <span className="truncate">
           {active
-            ? `Sumber: ${active.shortName}`
-            : "Sumber data"}
+            ? dualCreditLine(metric!)
+            : "Sumber & pemrosesan"}
         </span>
         <ChevronDown
           className={cn(
@@ -86,23 +88,28 @@ export function DataAttribution({
           <div
             role="dialog"
             aria-label="Sumber data statistik"
-            className="absolute bottom-full right-0 z-50 mb-2 w-[min(100vw-1.5rem,24rem)] overflow-hidden rounded-xl border border-border bg-surface-elevated shadow-xl"
+            className="absolute bottom-full right-0 z-50 mb-2 max-h-[min(70dvh,32rem)] w-[min(100vw-1.5rem,24rem)] overflow-y-auto overflow-x-hidden rounded-xl border border-border bg-surface-elevated shadow-xl"
           >
             <div className="border-b border-border px-3.5 py-2.5">
               <p className="text-sm font-semibold text-fg">Sumber & atribusi</p>
               <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
                 {DATA_SOURCES.requiredAttribution}
               </p>
-              {metric && (
-                <p className="mt-1.5 rounded-md bg-muted/60 px-2 py-1 text-[11px] text-fg">
-                  Indikator aktif: <strong>{shortAttribution(metric)}</strong>
-                </p>
-              )}
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                {DATA_SOURCES.dualCreditNote}
+              </p>
               <p className="mt-1 text-[10px] text-muted-foreground">
                 Diperbarui {DATA_SOURCES.updatedAt} · {DATA_SOURCES.coverageNote}
               </p>
             </div>
-            <ul className="max-h-72 overflow-y-auto p-2">
+
+            {metric && (
+              <div className="border-b border-border p-2">
+                <SourceProcessingBlock metric={metric} compact />
+              </div>
+            )}
+
+            <ul className="max-h-56 overflow-y-auto p-2">
               {DATA_SOURCES.sources.map((s) => {
                 const isActive =
                   metric &&
@@ -124,10 +131,11 @@ export function DataAttribution({
                           <ExternalLink className="size-3 shrink-0 text-muted-foreground" />
                         </span>
                         <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                          {s.year} · {reliabilityLabel(s.reliability)}
+                          {s.year} · {reliabilityLabel(s.reliability)} ·{" "}
+                          {s.updateCadence}
                         </span>
                         <span className="mt-1 block text-[10px] leading-snug text-muted-foreground/90">
-                          {s.citation}
+                          {s.processingNote}
                         </span>
                       </span>
                     </a>

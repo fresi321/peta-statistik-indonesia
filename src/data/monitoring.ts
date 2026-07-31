@@ -65,8 +65,8 @@ export const DATA_SLA_DAYS = {
 
 /** National administrative reality (post-2022 Papua splits) */
 export const NATIONAL_PROVINCE_COUNT = 38;
-/** Current map layer feature count */
-export const MAP_LAYER_PROVINCE_COUNT = 34;
+/** Current map layer feature count (38 with approximated Papua units) */
+export const MAP_LAYER_PROVINCE_COUNT = 38;
 
 export type FreshnessMeta = {
   updatedAt: string;
@@ -170,7 +170,7 @@ export function runMonitoring(opts?: {
     });
   }
 
-  // --- 2. Coverage: 34 vs 38 ---
+  // --- 2. Coverage: map layer vs national 38 ---
   {
     const n = PROVINCES.length;
     const gap = NATIONAL_PROVINCE_COUNT - n;
@@ -182,7 +182,17 @@ export function runMonitoring(opts?: {
         title: `Layer peta ${n} provinsi (nasional ${NATIONAL_PROVINCE_COUNT})`,
         detail: DATA_SOURCES.coverageNote,
         action:
-          "Saat layer GeoJSON 38 provinsi tersedia, pecah unit Papua hasil pemekaran 2022 dan isi statistik terpisah.",
+          "Lengkapi unit provinsi yang hilang di CORE + GeoJSON hingga 38.",
+      });
+    } else {
+      alerts.push({
+        id: "coverage-papua-approx",
+        severity: "info",
+        category: "coverage",
+        title: "Batas unit Papua diaproksimasi",
+        detail: DATA_SOURCES.coverageNote,
+        action:
+          "Ganti geometri Papua dengan batas resmi (BigData/Kemendagri) bila tersedia untuk akurasi spasial.",
       });
     }
     checks.push({
@@ -341,9 +351,9 @@ export function runMonitoring(opts?: {
     }
     checks.push({
       id: "chk-attribution",
-      label: "Atribusi BPS & sitasi",
+      label: "Atribusi sumber & sitasi",
       category: "attribution",
-      description: "Wajib untuk publikasi data pihak ketiga",
+      description: "Wajib untuk publikasi data pihak ketiga (BPS & non-BPS)",
       status: hasAttr && hasSources ? "ok" : "fail",
       summary: `${DATA_SOURCES.sources.length} sumber · atribusi ${hasAttr ? "ada" : "hilang"}`,
     });

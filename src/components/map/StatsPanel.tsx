@@ -10,6 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import { EntityListSection } from "@/components/map/EntityList";
+import { SourceProcessingBlock } from "@/components/map/SourceProcessingBlock";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -345,36 +346,40 @@ export function StatsPanel({
 
         <Separator className="my-5" />
 
-        <section aria-labelledby="sumber-indikator">
-          <h3 id="sumber-indikator" className="text-sm font-medium text-fg">
+        <section aria-labelledby="sumber-indikator" className="space-y-3">
+          <h3 id="sumber-indikator" className="sr-only">
             Sumber data indikator
           </h3>
-          <ul className="mt-2 space-y-2">
-            {allSrc.map((s) => (
-              <li
-                key={s.id}
-                className="rounded-lg border border-border bg-bg/50 px-3 py-2"
-              >
-                <a
-                  href={s.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs font-medium text-fg hover:text-accent"
+          <SourceProcessingBlock metric={metric} />
+          {allSrc.length > 1 && (
+            <ul className="space-y-2">
+              {allSrc.map((s) => (
+                <li
+                  key={s.id}
+                  className="rounded-lg border border-border bg-bg/50 px-3 py-2"
                 >
-                  {s.name}
-                  <ExternalLink className="size-3 shrink-0" />
-                </a>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">
-                  {s.year} · {reliabilityLabel(s.reliability)}
-                </p>
-                <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
-                  {s.citation}
-                </p>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-            {DATA_SOURCES.requiredAttribution}
+                  <a
+                    href={s.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-fg hover:text-accent"
+                  >
+                    {s.name}
+                    <ExternalLink className="size-3 shrink-0" />
+                  </a>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    {s.year} · {reliabilityLabel(s.reliability)} ·{" "}
+                    {s.updateCadence}
+                  </p>
+                  <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
+                    {s.processingNote}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            {DATA_SOURCES.requiredAttribution} {DATA_SOURCES.dualCreditNote}
           </p>
         </section>
       </div>
@@ -385,17 +390,32 @@ export function StatsPanel({
 function EmptyPanel() {
   return (
     <div className="flex h-full flex-col items-center justify-center px-8 text-center">
-      <div className="flex size-12 items-center justify-center rounded-2xl border border-border bg-surface-elevated">
+      <div className="flex size-12 items-center justify-center rounded-2xl border border-border bg-surface-elevated shadow-sm">
         <MapPin className="size-5 text-accent" />
       </div>
       <h2 className="mt-4 font-display text-lg font-semibold text-fg">
         Pilih wilayah
       </h2>
-      <p className="mt-2 max-w-[240px] text-sm leading-relaxed text-muted-foreground">
-        Klik provinsi untuk melihat angka, daftar nama PT/RS/destinasi, dan
-        sumber data.
+      <p className="mt-2 max-w-[260px] text-sm leading-relaxed text-muted-foreground">
+        Ketuk salah satu dari {DATA_SOURCES.provinceCount} provinsi di peta atau
+        daftar kiri untuk melihat angka, katalog PT/RS/destinasi, dan sumber
+        data.
       </p>
-      <p className="mt-4 max-w-[240px] text-[11px] leading-relaxed text-muted-foreground">
+      <ul className="mt-4 max-w-[260px] space-y-1.5 text-left text-[11px] text-muted-foreground">
+        <li className="flex gap-2">
+          <span className="font-medium text-accent">1.</span>
+          Hover / ketuk peta → kartu ringkas
+        </li>
+        <li className="flex gap-2">
+          <span className="font-medium text-accent">2.</span>
+          Buka detail untuk grafik & sitasi
+        </li>
+        <li className="flex gap-2">
+          <span className="font-medium text-accent">3.</span>
+          Filter warna di legenda atau buka tabel
+        </li>
+      </ul>
+      <p className="mt-5 max-w-[260px] text-[11px] leading-relaxed text-muted-foreground">
         {DATA_SOURCES.requiredAttribution}
       </p>
     </div>

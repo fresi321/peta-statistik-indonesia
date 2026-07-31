@@ -16,13 +16,15 @@ import { cn } from "@/lib/utils";
 
 /** High-intent shortcuts for first-time discovery */
 export const QUICK_METRICS: { key: MetricKey; reason: string }[] = [
+  { key: "stunting", reason: "Prevalensi stunting" },
+  { key: "disasterEvents", reason: "Kejadian bencana" },
+  { key: "voterTurnout", reason: "Partisipasi pemilu" },
+  { key: "tkddPerCapita", reason: "Transfer daerah" },
   { key: "ump", reason: "Upah minimum kerja" },
   { key: "population", reason: "Berapa penduduk?" },
   { key: "inflation", reason: "Kenaikan harga" },
   { key: "hdi", reason: "Indeks pembangunan" },
   { key: "poverty", reason: "Tingkat kemiskinan" },
-  { key: "riceProduction", reason: "Produksi padi" },
-  { key: "lifeExpectancy", reason: "Harapan hidup" },
   { key: "gdpPerCapita", reason: "Kekayaan daerah" },
 ];
 

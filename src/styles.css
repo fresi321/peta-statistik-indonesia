@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "leaflet/dist/leaflet.css";
+/* leaflet CSS loads with the map code-split chunk (see IndonesiaMap.tsx) */
 
 /**
  * Atlas Day — light cartographic product theme
@@ -118,9 +118,10 @@
   background: color-mix(in oklab, var(--color-surface) 96%, transparent) !important;
   color: var(--color-fg) !important;
   border-color: var(--color-border) !important;
-  width: 40px !important;
-  height: 40px !important;
-  line-height: 40px !important;
+  /* WCAG 2.5.5 target size (enhanced): ≥44×44 CSS px for touch */
+  width: 44px !important;
+  height: 44px !important;
+  line-height: 44px !important;
   backdrop-filter: blur(8px);
 }
 
@@ -156,13 +157,42 @@
   border-radius: 10px !important;
   color: var(--color-fg) !important;
   box-shadow: 0 10px 28px rgb(15 23 42 / 0.12) !important;
-  padding: 8px 12px !important;
+  padding: 10px 12px !important;
   font-size: 12px !important;
+  line-height: 1.35 !important;
+  max-width: 240px !important;
   backdrop-filter: blur(10px);
 }
 
 .map-tooltip::before {
   border-top-color: var(--color-border) !important;
+}
+
+.map-tooltip-title {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 4px;
+  color: var(--color-fg);
+}
+
+.map-tooltip-metric {
+  color: var(--color-fg);
+}
+
+.map-tooltip-label {
+  color: var(--color-muted-foreground);
+}
+
+.map-tooltip-rank {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--color-muted-foreground);
+}
+
+.map-tooltip-note {
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--color-muted-foreground);
 }
 
 .province-path {
