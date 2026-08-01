@@ -20,21 +20,30 @@ import { ClientOnly } from "@tanstack/react-router";
 import { DataAttribution } from "@/components/map/DataAttribution";
 import { DataFreshnessBadge } from "@/components/map/DataFreshnessBadge";
 import { ChoroplethLegend } from "@/components/map/ChoroplethLegend";
+import { HistoryTimeline } from "@/components/map/HistoryTimeline";
+import { LevelSwitcher } from "@/components/map/LevelSwitcher";
 import { MetricPicker, QUICK_METRICS } from "@/components/map/MetricPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  REGENCIES,
+  REGENCY_BY_GEO,
+  type RegencyUnit,
+} from "@/data/admin/regency-index";
+import {
   CATEGORIES,
   DATA_SOURCES,
   METRIC_BY_KEY,
+  PROVINCE_BY_GEO,
   PROVINCES,
   getCategory,
-  getMetricValue,
   metricsForCategory,
   type CategoryKey,
   type MetricKey,
   type ProvinceStats,
 } from "@/data/province-stats";
+import { useHistoryPlayback } from "@/hooks/useHistoryPlayback";
+import { hasHistory, type AdminLevel } from "@/lib/history-access";
 import {
   PALETTE_STORAGE_KEY,
   type PaletteMode,
@@ -42,10 +51,33 @@ import {
 import {
   buildMetricSummary,
   buildPreviewStats,
+  resolveMetricValue,
 } from "@/lib/map-legend";
 import { mapColorForValue } from "@/lib/map-scale";
 import { warmMapAssets } from "@/lib/prefetch-geo";
 import { cn } from "@/lib/utils";
+import type { MapSelectPayload } from "@/components/map/IndonesiaMap";
+import { getHistoryValue } from "@/lib/history-access";
+
+function buildRegencyPreview(
+  unit: RegencyUnit,
+  metric: MetricKey,
+  historyYear: number | null,
+) {
+  const m = METRIC_BY_KEY[metric];
+  const value =
+    historyYear != null
+      ? getHistoryValue(unit.geoKey, metric, historyYear, "regency")
+      : null;
+  return {
+    name: unit.name,
+    parent: unit.provinceName,
+    valueLabel: value == null ? "—" : m.format(value),
+    unit: m.unit,
+    metricShort:
+      historyYear != null ? `${m.short} · ${historyYear}` : m.short,
+  };
+}
 
 /** Heavy chunks — Leaflet / Recharts / dialogs — code-split from shell */
 const IndonesiaMap = lazy(() =>
@@ -133,11 +165,35 @@ export function MapApp() {
     null,
   );
   const [palette, setPalette] = useState<PaletteMode>("default");
+  const [adminLevel, setAdminLevel] = useState<AdminLevel>("province");
+  const [parentFilter, setParentFilter] = useState<string | null>(null);
+  const [regencyLoading, setRegencyLoading] = useState(false);
+  const [selectedRegency, setSelectedRegency] = useState<RegencyUnit | null>(
+    null,
+  );
+  const [hoveredRegency, setHoveredRegency] = useState<RegencyUnit | null>(
+    null,
+  );
+
+  const history = useHistoryPlayback(metric, adminLevel);
+  const historyYear = history.enabled ? history.year : null;
+  const historyDomain = history.enabled ? history.domain : null;
 
   const activeCategory = getCategory(category);
   const categoryMetrics = metricsForCategory(category);
   const activeMetric = METRIC_BY_KEY[metric];
-  const metricSummary = useMemo(() => buildMetricSummary(metric), [metric]);
+  const metricSummary = useMemo(
+    () => buildMetricSummary(metric, historyYear, historyDomain),
+    [metric, historyYear, historyDomain],
+  );
+
+  // Kab/kota MVP: only poverty has history — auto-switch metric
+  useEffect(() => {
+    if (adminLevel === "regency" && !hasHistory(metric, "regency")) {
+      setCategory("demografi");
+      setMetric("poverty");
+    }
+  }, [adminLevel, metric]);
 
   useEffect(() => {
     setPalette(readPaletteMode());
@@ -202,7 +258,7 @@ export function MapApp() {
     }
   };
 
-  const filtered = useMemo(() => {
+  const filteredProvinces = useMemo(() => {
     const q = query.trim().toLowerCase();
     let list = [...PROVINCES];
     if (q) {
@@ -214,47 +270,145 @@ export function MapApp() {
       );
     }
     list.sort((a, b) => {
-      const diff = getMetricValue(a, metric) - getMetricValue(b, metric);
+      const va = resolveMetricValue(a, metric, historyYear) ?? 0;
+      const vb = resolveMetricValue(b, metric, historyYear) ?? 0;
+      const diff = va - vb;
       return sortAsc ? diff : -diff;
     });
     return list;
-  }, [query, metric, sortAsc]);
+  }, [query, metric, sortAsc, historyYear]);
 
-  const handleMapSelect = (
-    geoKey: string | null,
-    stats: ProvinceStats | null,
-  ) => {
-    setSelectedKey(geoKey);
-    setSelected(stats);
-    if (stats) {
-      setListOpen(false);
-      if (isXlViewport()) {
-        setMobileStatsOpen(true);
+  const filteredRegencies = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    let list = parentFilter
+      ? REGENCIES.filter((r) => r.parentProvinceKey === parentFilter)
+      : [...REGENCIES];
+    if (q) {
+      list = list.filter(
+        (r) =>
+          r.name.toLowerCase().includes(q) ||
+          r.provinceName.toLowerCase().includes(q) ||
+          r.geoKey.toLowerCase().includes(q),
+      );
+    }
+    list.sort((a, b) => {
+      const va =
+        historyYear != null
+          ? (getHistoryValue(a.geoKey, metric, historyYear, "regency") ?? 0)
+          : 0;
+      const vb =
+        historyYear != null
+          ? (getHistoryValue(b.geoKey, metric, historyYear, "regency") ?? 0)
+          : 0;
+      return sortAsc ? va - vb : vb - va;
+    });
+    return list;
+  }, [query, metric, sortAsc, historyYear, parentFilter]);
+
+  const handleMapSelect = (payload: MapSelectPayload | null) => {
+    if (!payload) {
+      setSelectedKey(null);
+      setSelected(null);
+      setSelectedRegency(null);
+      setMobileStatsOpen(false);
+      return;
+    }
+    setSelectedKey(payload.geoKey);
+    if (payload.level === "province") {
+      setSelected(payload.province);
+      setSelectedRegency(null);
+      if (payload.province) {
+        setListOpen(false);
+        setMobileStatsOpen(isXlViewport());
       } else {
         setMobileStatsOpen(false);
       }
     } else {
-      setMobileStatsOpen(false);
+      setSelected(null);
+      setSelectedRegency(payload.regency);
+      if (payload.regency) {
+        setListOpen(false);
+        setMobileStatsOpen(isXlViewport());
+      } else {
+        setMobileStatsOpen(false);
+      }
     }
   };
 
-  const handleListSelect = (p: ProvinceStats) => {
+  const handleListSelectProvince = (p: ProvinceStats) => {
     setSelectedKey(p.geoKey);
     setSelected(p);
+    setSelectedRegency(null);
+    setListOpen(false);
+    setMobileStatsOpen(true);
+  };
+
+  const handleListSelectRegency = (r: RegencyUnit) => {
+    setSelectedKey(r.geoKey);
+    setSelectedRegency(r);
+    setSelected(null);
     setListOpen(false);
     setMobileStatsOpen(true);
   };
 
   const openDetailFromCard = () => {
+    if (adminLevel === "regency") {
+      const target = hoveredRegency ?? selectedRegency;
+      if (!target) return;
+      setSelectedKey(target.geoKey);
+      setSelectedRegency(target);
+      setSelected(null);
+      setMobileStatsOpen(true);
+      return;
+    }
     const target = hovered ?? selected;
     if (!target) return;
     setSelectedKey(target.geoKey);
     setSelected(target);
+    setSelectedRegency(null);
     setMobileStatsOpen(true);
   };
 
+  const setLevel = (level: AdminLevel) => {
+    history.pause();
+    setAdminLevel(level);
+    setSelectedKey(null);
+    setSelected(null);
+    setSelectedRegency(null);
+    setHovered(null);
+    setHoveredRegency(null);
+    setLegendClass(null);
+    if (level === "province") {
+      setParentFilter(null);
+    }
+  };
+
+  const drillIntoProvince = (provinceKey: string) => {
+    setAdminLevel("regency");
+    setParentFilter(provinceKey);
+    setSelectedKey(null);
+    setSelected(null);
+    setSelectedRegency(null);
+    if (!hasHistory(metric, "regency")) {
+      setCategory("demografi");
+      setMetric("poverty");
+    }
+  };
+
   const display = hovered ?? selected;
-  const preview = display ? buildPreviewStats(display, metric) : null;
+  const displayRegency = hoveredRegency ?? selectedRegency;
+  const preview =
+    adminLevel === "province" && display
+      ? buildPreviewStats(display, metric, historyYear)
+      : null;
+  const regencyPreview =
+    adminLevel === "regency" && displayRegency
+      ? buildRegencyPreview(displayRegency, metric, historyYear)
+      : null;
+
+  const parentFilterName = parentFilter
+    ? (PROVINCE_BY_GEO[parentFilter]?.name ?? parentFilter)
+    : null;
 
   return (
     <div className="app-shell relative flex h-full w-full flex-col overflow-hidden">
@@ -282,7 +436,11 @@ export function MapApp() {
                 {DATA_SOURCES.provinceCount} provinsi
               </span>
               <div className="hidden md:block">
-                <DataFreshnessBadge metric={metric} compact />
+                <DataFreshnessBadge
+                  metric={metric}
+                  compact
+                  historyYear={historyYear}
+                />
               </div>
             </div>
           </div>
@@ -434,20 +592,41 @@ export function MapApp() {
           className="hidden w-[280px] shrink-0 flex-col border-r border-border bg-surface/80 lg:flex"
           aria-label="Daftar provinsi"
         >
-          <ProvinceList
-            query={query}
-            onQuery={setQuery}
-            filtered={filtered}
-            metric={metric}
-            categoryLabel={activeCategory.short}
-            selectedKey={selectedKey}
-            sortAsc={sortAsc}
-            palette={palette}
-            onToggleSort={() => setSortAsc((v) => !v)}
-            onSelect={handleListSelect}
-            onOpenDataPicker={() => setPickerOpen(true)}
-            onOpenTable={() => setTableOpen(true)}
-          />
+          {adminLevel === "province" ? (
+            <ProvinceList
+              query={query}
+              onQuery={setQuery}
+              filtered={filteredProvinces}
+              metric={metric}
+              categoryLabel={activeCategory.short}
+              selectedKey={selectedKey}
+              sortAsc={sortAsc}
+              palette={palette}
+              historyYear={historyYear}
+              historyDomain={historyDomain}
+              onToggleSort={() => setSortAsc((v) => !v)}
+              onSelect={handleListSelectProvince}
+              onOpenDataPicker={() => setPickerOpen(true)}
+              onOpenTable={() => setTableOpen(true)}
+            />
+          ) : (
+            <RegencyList
+              query={query}
+              onQuery={setQuery}
+              filtered={filteredRegencies}
+              metric={metric}
+              selectedKey={selectedKey}
+              sortAsc={sortAsc}
+              palette={palette}
+              historyYear={historyYear}
+              historyDomain={historyDomain}
+              parentFilterName={parentFilterName}
+              onClearParent={() => setParentFilter(null)}
+              onToggleSort={() => setSortAsc((v) => !v)}
+              onSelect={handleListSelectRegency}
+              onOpenDataPicker={() => setPickerOpen(true)}
+            />
+          )}
         </aside>
 
         <div
@@ -463,13 +642,60 @@ export function MapApp() {
                 legendClass={legendClass}
                 legendHoverClass={legendHoverClass}
                 palette={palette}
+                historyYear={historyYear}
+                adminLevel={adminLevel}
+                parentFilter={parentFilter}
                 onSelect={handleMapSelect}
-                onHover={setHovered}
+                onHoverProvince={setHovered}
+                onHoverRegency={setHoveredRegency}
+                onRegencyLoadingChange={setRegencyLoading}
               />
             </Suspense>
           </ClientOnly>
 
-          <div className="pointer-events-none absolute inset-x-0 bottom-2 z-20 flex flex-col gap-1.5 px-2 sm:bottom-4 sm:left-4 sm:right-auto sm:max-w-sm sm:px-0">
+          <div className="pointer-events-none absolute inset-x-0 bottom-2 z-30 flex flex-col gap-1.5 px-2 sm:bottom-4 sm:left-4 sm:right-auto sm:max-w-md sm:px-0">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <LevelSwitcher
+                level={adminLevel}
+                onChange={setLevel}
+                loading={regencyLoading}
+              />
+              {parentFilterName && (
+                <button
+                  type="button"
+                  onClick={() => setParentFilter(null)}
+                  className="pointer-events-auto inline-flex min-h-9 items-center gap-1 rounded-full border border-border bg-surface/95 px-2.5 text-[11px] font-medium text-fg shadow-md backdrop-blur-md"
+                >
+                  Dalam: {parentFilterName}
+                  <X className="size-3 opacity-70" aria-hidden />
+                </button>
+              )}
+            </div>
+
+            {adminLevel === "regency" && (
+              <p className="pointer-events-none rounded-lg border border-border/80 bg-surface/90 px-2.5 py-1 text-[10px] leading-snug text-muted-foreground shadow-sm backdrop-blur-md">
+                Pola warna berubah di level lebih rinci (efek skala/zona · MAUP).
+                Batas kab/kota disederhanakan untuk visualisasi.
+              </p>
+            )}
+
+            {history.enabled && history.year != null && (
+              <HistoryTimeline
+                years={history.years}
+                yearIndex={history.yearIndex}
+                year={history.year}
+                playing={history.playing}
+                speed={history.speed}
+                loop={history.loop}
+                onTogglePlay={history.togglePlay}
+                onStepPrev={history.stepPrev}
+                onStepNext={history.stepNext}
+                onScrub={history.scrubToIndex}
+                onSpeedChange={history.setSpeed}
+                onLoopChange={history.setLoop}
+              />
+            )}
+
             {preview && (
               <button
                 type="button"
@@ -499,6 +725,18 @@ export function MapApp() {
                         {preview.vsMeanLabel}
                       </p>
                     )}
+                    {selected && (
+                      <button
+                        type="button"
+                        className="mt-1.5 text-[11px] font-medium text-accent"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          drillIntoProvince(selected.geoKey);
+                        }}
+                      >
+                        Lihat kab/kota di sini →
+                      </button>
+                    )}
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="font-mono text-base font-medium tabular-nums text-fg">
@@ -512,6 +750,32 @@ export function MapApp() {
               </button>
             )}
 
+            {regencyPreview && (
+              <button
+                type="button"
+                className="pointer-events-auto rounded-xl border border-border bg-surface/95 px-3 py-2.5 text-left shadow-lg backdrop-blur-md"
+                onClick={openDetailFromCard}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-fg">
+                      {regencyPreview.name}
+                    </p>
+                    <p className="truncate text-[11px] text-muted-foreground">
+                      {regencyPreview.parent}
+                    </p>
+                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                      {regencyPreview.metricShort}
+                      {regencyPreview.unit ? ` · ${regencyPreview.unit}` : ""}
+                    </p>
+                  </div>
+                  <p className="shrink-0 font-mono text-base font-medium tabular-nums text-fg">
+                    {regencyPreview.valueLabel}
+                  </p>
+                </div>
+              </button>
+            )}
+
             <ChoroplethLegend
               metric={metric}
               activeClass={legendClass}
@@ -520,6 +784,10 @@ export function MapApp() {
               onHoveredClassChange={setLegendHoverClass}
               palette={palette}
               onPaletteChange={setPalettePersist}
+              domain={historyDomain}
+              historyYear={historyYear}
+              adminLevel={adminLevel === "regency" ? "regency" : "province"}
+              parentFilter={parentFilter}
             />
 
             <div className="hidden justify-end sm:flex">
@@ -533,13 +801,29 @@ export function MapApp() {
             <PanelChunkFallback className="hidden w-[360px] shrink-0 border-l border-border xl:flex" />
           }
         >
-          <StatsPanel
-            province={selected}
-            metric={metric}
-            category={category}
-            onClose={() => handleMapSelect(null, null)}
-            className="hidden w-[360px] shrink-0 xl:flex"
-          />
+          {adminLevel === "province" ? (
+            <StatsPanel
+              province={selected}
+              metric={metric}
+              category={category}
+              onClose={() => handleMapSelect(null)}
+              className="hidden w-[360px] shrink-0 xl:flex"
+              historyYear={historyYear}
+              historyDomain={historyDomain}
+              onDrillRegency={
+                selected ? () => drillIntoProvince(selected.geoKey) : undefined
+              }
+            />
+          ) : (
+            <RegencyStatsPanel
+              regency={selectedRegency}
+              metric={metric}
+              historyYear={historyYear}
+              historyDomain={historyDomain}
+              onClose={() => handleMapSelect(null)}
+              className="hidden w-[360px] shrink-0 xl:flex"
+            />
+          )}
         </Suspense>
       </div>
 
@@ -578,28 +862,33 @@ export function MapApp() {
       {downloadOpen && (
         <Suspense fallback={null}>
           <DownloadMenu
-            filtered={filtered}
+            filtered={
+              adminLevel === "province" ? filteredProvinces : PROVINCES
+            }
             all={PROVINCES}
             category={category}
             metric={metric}
             open={downloadOpen}
             onOpenChange={setDownloadOpen}
             hideTrigger
+            historyYear={historyYear}
           />
         </Suspense>
       )}
 
-      {tableOpen && (
+      {tableOpen && adminLevel === "province" && (
         <Suspense fallback={null}>
           <AccessibleDataTable
             open={tableOpen}
             onOpenChange={setTableOpen}
-            rows={filtered}
+            rows={filteredProvinces}
             metric={metric}
             palette={palette}
             selectedKey={selectedKey}
-            onSelect={handleListSelect}
+            onSelect={handleListSelectProvince}
             hideTrigger
+            historyYear={historyYear}
+            historyDomain={historyDomain}
           />
         </Suspense>
       )}
@@ -616,7 +905,9 @@ export function MapApp() {
             <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border sm:hidden" />
             <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
               <div>
-                <h2 className="text-sm font-semibold">Cari provinsi</h2>
+                <h2 className="text-sm font-semibold">
+                  {adminLevel === "regency" ? "Cari kab/kota" : "Cari provinsi"}
+                </h2>
                 <p className="text-[11px] text-muted-foreground">
                   Urut {activeMetric.short}
                 </p>
@@ -631,31 +922,57 @@ export function MapApp() {
                 <X className="size-4" />
               </Button>
             </div>
-            <ProvinceList
-              query={query}
-              onQuery={setQuery}
-              filtered={filtered}
-              metric={metric}
-              categoryLabel={activeCategory.short}
-              selectedKey={selectedKey}
-              sortAsc={sortAsc}
-              palette={palette}
-              onToggleSort={() => setSortAsc((v) => !v)}
-              onSelect={handleListSelect}
-              onOpenDataPicker={() => {
-                setListOpen(false);
-                setPickerOpen(true);
-              }}
-              onOpenTable={() => {
-                setListOpen(false);
-                setTableOpen(true);
-              }}
-            />
+            {adminLevel === "province" ? (
+              <ProvinceList
+                query={query}
+                onQuery={setQuery}
+                filtered={filteredProvinces}
+                metric={metric}
+                categoryLabel={activeCategory.short}
+                selectedKey={selectedKey}
+                sortAsc={sortAsc}
+                palette={palette}
+                historyYear={historyYear}
+                historyDomain={historyDomain}
+                onToggleSort={() => setSortAsc((v) => !v)}
+                onSelect={handleListSelectProvince}
+                onOpenDataPicker={() => {
+                  setListOpen(false);
+                  setPickerOpen(true);
+                }}
+                onOpenTable={() => {
+                  setListOpen(false);
+                  setTableOpen(true);
+                }}
+              />
+            ) : (
+              <RegencyList
+                query={query}
+                onQuery={setQuery}
+                filtered={filteredRegencies}
+                metric={metric}
+                selectedKey={selectedKey}
+                sortAsc={sortAsc}
+                palette={palette}
+                historyYear={historyYear}
+                historyDomain={historyDomain}
+                parentFilterName={parentFilterName}
+                onClearParent={() => setParentFilter(null)}
+                onToggleSort={() => setSortAsc((v) => !v)}
+                onSelect={handleListSelectRegency}
+                onOpenDataPicker={() => {
+                  setListOpen(false);
+                  setPickerOpen(true);
+                }}
+              />
+            )}
           </div>
         </div>
       )}
 
-      {selected && mobileStatsOpen && (
+      {((selected && adminLevel === "province") ||
+        (selectedRegency && adminLevel === "regency")) &&
+        mobileStatsOpen && (
         <div className="fixed inset-0 z-50 xl:hidden">
           <button
             type="button"
@@ -670,13 +987,31 @@ export function MapApp() {
                 <PanelChunkFallback className="min-h-[12rem] flex-1" />
               }
             >
-              <StatsPanel
-                province={selected}
-                metric={metric}
-                category={category}
-                onClose={() => handleMapSelect(null, null)}
-                className="border-l-0"
-              />
+              {adminLevel === "province" ? (
+                <StatsPanel
+                  province={selected}
+                  metric={metric}
+                  category={category}
+                  onClose={() => handleMapSelect(null)}
+                  className="border-l-0"
+                  historyYear={historyYear}
+                  historyDomain={historyDomain}
+                  onDrillRegency={
+                    selected
+                      ? () => drillIntoProvince(selected.geoKey)
+                      : undefined
+                  }
+                />
+              ) : (
+                <RegencyStatsPanel
+                  regency={selectedRegency}
+                  metric={metric}
+                  historyYear={historyYear}
+                  historyDomain={historyDomain}
+                  onClose={() => handleMapSelect(null)}
+                  className="border-l-0"
+                />
+              )}
             </Suspense>
           </div>
         </div>
@@ -727,6 +1062,8 @@ function ProvinceList({
   selectedKey,
   sortAsc,
   palette,
+  historyYear = null,
+  historyDomain = null,
   onToggleSort,
   onSelect,
   onOpenDataPicker,
@@ -740,12 +1077,15 @@ function ProvinceList({
   selectedKey: string | null;
   sortAsc: boolean;
   palette: PaletteMode;
+  historyYear?: number | null;
+  historyDomain?: { min: number; max: number } | null;
   onToggleSort: () => void;
   onSelect: (p: ProvinceStats) => void;
   onOpenDataPicker: () => void;
   onOpenTable: () => void;
 }) {
   const m = METRIC_BY_KEY[metric];
+  const colorOpts = historyDomain ? { domain: historyDomain } : undefined;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -766,6 +1106,7 @@ function ProvinceList({
         <div className="mt-2 flex items-center justify-between gap-2">
           <p className="min-w-0 truncate text-[11px] text-muted-foreground">
             {filtered.length} wilayah · {m.short}
+            {historyYear != null ? ` · ${historyYear}` : ""}
           </p>
           <button
             type="button"
@@ -800,7 +1141,7 @@ function ProvinceList({
       <div className="panel-scroll flex-1 overflow-y-auto overscroll-contain">
         <ul className="p-2" aria-label={`Daftar provinsi menurut ${m.short}`}>
           {filtered.map((p, i) => {
-            const val = getMetricValue(p, metric);
+            const val = resolveMetricValue(p, metric, historyYear);
             const active = selectedKey === p.geoKey;
             return (
               <li key={p.geoKey}>
@@ -820,7 +1161,10 @@ function ProvinceList({
                   <span
                     className="size-2.5 shrink-0 rounded-full"
                     style={{
-                      background: mapColorForValue(val, metric, palette),
+                      background:
+                        val == null
+                          ? "var(--color-border)"
+                          : mapColorForValue(val, metric, palette, colorOpts),
                     }}
                     aria-hidden
                   />
@@ -833,7 +1177,7 @@ function ProvinceList({
                     </span>
                   </span>
                   <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-                    {m.format(val)}
+                    {val == null ? "—" : m.format(val)}
                   </span>
                 </button>
               </li>
@@ -852,5 +1196,240 @@ function ProvinceList({
         </p>
       </div>
     </div>
+  );
+}
+
+function RegencyList({
+  query,
+  onQuery,
+  filtered,
+  metric,
+  selectedKey,
+  sortAsc,
+  palette,
+  historyYear = null,
+  historyDomain = null,
+  parentFilterName,
+  onClearParent,
+  onToggleSort,
+  onSelect,
+  onOpenDataPicker,
+}: {
+  query: string;
+  onQuery: (q: string) => void;
+  filtered: RegencyUnit[];
+  metric: MetricKey;
+  selectedKey: string | null;
+  sortAsc: boolean;
+  palette: PaletteMode;
+  historyYear?: number | null;
+  historyDomain?: { min: number; max: number } | null;
+  parentFilterName: string | null;
+  onClearParent: () => void;
+  onToggleSort: () => void;
+  onSelect: (r: RegencyUnit) => void;
+  onOpenDataPicker: () => void;
+}) {
+  const m = METRIC_BY_KEY[metric];
+  const colorOpts = historyDomain ? { domain: historyDomain } : undefined;
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="border-b border-border p-3">
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
+          <Input
+            value={query}
+            onChange={(e) => onQuery(e.target.value)}
+            placeholder="Cari kab/kota atau provinsi…"
+            className="h-11 pl-9"
+            aria-label="Filter kab/kota"
+          />
+        </div>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <p className="min-w-0 truncate text-[11px] text-muted-foreground">
+            {filtered.length} kab/kota · {m.short}
+            {historyYear != null ? ` · ${historyYear}` : ""}
+          </p>
+          <button
+            type="button"
+            onClick={onToggleSort}
+            className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-md border border-border px-2.5 text-xs font-medium text-muted-foreground active:text-fg"
+          >
+            {sortAsc ? (
+              <ArrowUpNarrowWide className="size-3.5" />
+            ) : (
+              <ArrowDownWideNarrow className="size-3.5" />
+            )}
+            {sortAsc ? "Naik" : "Turun"}
+          </button>
+        </div>
+        {parentFilterName && (
+          <button
+            type="button"
+            onClick={onClearParent}
+            className="mt-2 min-h-10 w-full rounded-lg border border-accent/30 bg-accent/10 px-2.5 py-2 text-left text-[11px] font-medium text-accent"
+          >
+            Filter: {parentFilterName} · ketuk untuk hapus
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onOpenDataPicker}
+          className="mt-2 min-h-11 w-full rounded-lg border border-dashed border-border px-2.5 py-2 text-left text-[11px] text-muted-foreground active:border-accent/40 active:text-accent"
+        >
+          Data: <span className="font-medium text-fg">{m.label}</span>
+          {" · "}
+          level kab/kota (kemiskinan)
+        </button>
+      </div>
+      <div className="panel-scroll flex-1 overflow-y-auto overscroll-contain">
+        <ul className="p-2" aria-label={`Daftar kab/kota menurut ${m.short}`}>
+          {filtered.map((r, i) => {
+            const val =
+              historyYear != null
+                ? getHistoryValue(r.geoKey, metric, historyYear, "regency")
+                : null;
+            const active = selectedKey === r.geoKey;
+            return (
+              <li key={r.geoKey}>
+                <button
+                  type="button"
+                  onClick={() => onSelect(r)}
+                  className={cn(
+                    "flex min-h-12 w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors active:bg-muted/80",
+                    active
+                      ? "bg-accent/10 ring-1 ring-accent/30"
+                      : "hover:bg-muted/80",
+                  )}
+                >
+                  <span className="w-5 shrink-0 text-center font-mono text-[11px] tabular-nums text-muted-foreground">
+                    {i + 1}
+                  </span>
+                  <span
+                    className="size-2.5 shrink-0 rounded-full"
+                    style={{
+                      background:
+                        val == null
+                          ? "var(--color-border)"
+                          : mapColorForValue(val, metric, palette, colorOpts),
+                    }}
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-fg">
+                      {r.name}
+                    </span>
+                    <span className="block truncate text-[11px] text-muted-foreground">
+                      {r.provinceName}
+                    </span>
+                  </span>
+                  <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+                    {val == null ? "—" : m.format(val)}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+          {filtered.length === 0 && (
+            <li className="px-3 py-8 text-center text-sm text-muted-foreground">
+              Tidak ada kab/kota yang cocok.
+            </li>
+          )}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function RegencyStatsPanel({
+  regency,
+  metric,
+  historyYear,
+  historyDomain,
+  onClose,
+  className,
+}: {
+  regency: RegencyUnit | null;
+  metric: MetricKey;
+  historyYear: number | null;
+  historyDomain: { min: number; max: number } | null;
+  onClose: () => void;
+  className?: string;
+}) {
+  if (!regency) {
+    return (
+      <aside
+        className={cn(
+          "flex h-full flex-col border-l border-border bg-surface/95",
+          className,
+        )}
+      >
+        <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+          <p className="text-sm font-semibold text-fg">Pilih kab/kota</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Ketuk peta atau daftar untuk melihat nilai multi-tahun.
+          </p>
+        </div>
+      </aside>
+    );
+  }
+
+  const m = METRIC_BY_KEY[metric];
+  const value =
+    historyYear != null
+      ? getHistoryValue(regency.geoKey, metric, historyYear, "regency")
+      : null;
+
+  return (
+    <aside
+      className={cn(
+        "flex h-full flex-col border-l border-border bg-surface/95 backdrop-blur-sm",
+        className,
+      )}
+    >
+      <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-muted-foreground">
+            {regency.provinceName}
+          </p>
+          <h2 className="mt-1 font-display text-xl font-semibold tracking-tight text-fg">
+            {regency.name}
+          </h2>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          aria-label="Tutup panel"
+          className="shrink-0"
+        >
+          <X className="size-4" />
+        </Button>
+      </div>
+      <div className="panel-scroll flex-1 overflow-y-auto px-5 py-4">
+        <div className="rounded-xl border border-border bg-surface-elevated p-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            {m.label}
+            {historyYear != null ? ` · ${historyYear}` : ""}
+          </p>
+          <p className="mt-1 font-mono text-3xl font-medium tabular-nums text-fg">
+            {value == null ? "—" : m.format(value)}
+          </p>
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Visualisasi kab/kota · deret multi-tahun (bukan rilis resmi per unit)
+          </p>
+        </div>
+        {historyDomain && (
+          <p className="mt-3 text-[10px] text-muted-foreground">
+            Skala deret shared: {m.format(historyDomain.min)} –{" "}
+            {m.format(historyDomain.max)}
+          </p>
+        )}
+      </div>
+    </aside>
   );
 }

@@ -11,13 +11,20 @@ export function DataFreshnessBadge({
   metric,
   className,
   compact,
+  historyYear,
 }: {
   metric?: MetricKey;
   className?: string;
   compact?: boolean;
+  /** When set, show the active history frame year. */
+  historyYear?: number | null;
 }) {
   const global = globalFreshness();
   const metricInfo = metric ? metricFreshness(metric) : null;
+  const yearLabel =
+    historyYear != null
+      ? String(historyYear)
+      : metricInfo?.year ?? null;
 
   return (
     <div
@@ -28,24 +35,35 @@ export function DataFreshnessBadge({
       )}
       title={
         metricInfo
-          ? `${global.title} Indikator: ${metricInfo.shortName} (${metricInfo.year}) · ${metricInfo.cadence}`
+          ? `${global.title} Indikator: ${metricInfo.shortName} (${yearLabel ?? metricInfo.year}) · ${metricInfo.cadence}${
+              historyYear != null ? " · frame historis" : ""
+            }`
           : global.title
       }
     >
       <Clock className="size-3 shrink-0 opacity-80" aria-hidden />
       {compact ? (
         <span className="truncate">
-          {global.iso}
-          <span className="opacity-80"> · {global.label}</span>
+          {historyYear != null ? (
+            <>
+              {historyYear}
+              <span className="opacity-80"> · historis</span>
+            </>
+          ) : (
+            <>
+              {global.iso}
+              <span className="opacity-80"> · {global.label}</span>
+            </>
+          )}
         </span>
       ) : (
         <span className="min-w-0 truncate">
           Data {global.iso}
           <span className="opacity-80"> · {global.label}</span>
-          {metricInfo && (
+          {yearLabel && (
             <span className="opacity-90">
               {" "}
-              · {metricInfo.year}
+              · {yearLabel}
             </span>
           )}
         </span>

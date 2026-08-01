@@ -3,11 +3,13 @@ import { Table2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   METRIC_BY_KEY,
-  getMetricValue,
   type MetricKey,
   type ProvinceStats,
 } from "@/data/province-stats";
-import { provinceRank } from "@/lib/map-legend";
+import {
+  provinceRankAtYear,
+  resolveMetricValue,
+} from "@/lib/map-legend";
 import { mapColorForValue } from "@/lib/map-scale";
 import type { PaletteMode } from "@/lib/map-colors";
 import { cn } from "@/lib/utils";
@@ -23,6 +25,8 @@ type AccessibleDataTableProps = {
   /** Compact trigger button for toolbars */
   triggerClassName?: string;
   hideTrigger?: boolean;
+  historyYear?: number | null;
+  historyDomain?: { min: number; max: number } | null;
 };
 
 export function AccessibleDataTable({
@@ -35,23 +39,31 @@ export function AccessibleDataTable({
   onSelect,
   triggerClassName,
   hideTrigger,
+  historyYear = null,
+  historyDomain = null,
 }: AccessibleDataTableProps) {
   const m = METRIC_BY_KEY[metric];
 
   const tableRows = useMemo(() => {
+    const colorOpts = historyDomain ? { domain: historyDomain } : undefined;
     return rows.map((p, i) => {
-      const value = getMetricValue(p, metric);
-      const { rank } = provinceRank(p.geoKey, metric);
+      const value = resolveMetricValue(p, metric, historyYear);
+      const { rank } = provinceRankAtYear(p.geoKey, metric, historyYear);
       return {
         province: p,
         value,
         rank,
-        // display order rank in current sorted list
         listIndex: i + 1,
-        color: mapColorForValue(value, metric, palette),
+        color:
+          value == null
+            ? "var(--color-border)"
+            : mapColorForValue(value, metric, palette, colorOpts),
       };
     });
-  }, [rows, metric, palette]);
+  }, [rows, metric, palette, historyYear, historyDomain]);
+
+  const valueHeader =
+    historyYear != null ? `${m.short} (${historyYear})` : m.short;
 
   return (
     <>
@@ -93,10 +105,14 @@ export function AccessibleDataTable({
                   className="text-sm font-semibold text-fg"
                 >
                   Tabel {m.label}
+                  {historyYear != null ? ` · ${historyYear}` : ""}
                 </h2>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
                   {rows.length} provinsi · nilai, peringkat, dan wilayah — alternatif
                   non-visual ke peta warna
+                  {historyYear != null
+                    ? ` · frame historis ${historyYear}`
+                    : ""}
                 </p>
               </div>
               <Button
@@ -113,8 +129,9 @@ export function AccessibleDataTable({
             <div className="panel-scroll min-h-0 flex-1 overflow-auto overscroll-contain">
               <table className="w-full min-w-[20rem] border-collapse text-left text-sm">
                 <caption className="sr-only">
-                  {m.label} per provinsi Indonesia. Kolom: peringkat daftar, nama
-                  provinsi, wilayah, nilai {m.short}
+                  {m.label} per provinsi Indonesia
+                  {historyYear != null ? ` tahun ${historyYear}` : ""}. Kolom:
+                  peringkat daftar, nama provinsi, wilayah, nilai {m.short}
                   {m.unit ? ` dalam ${m.unit}` : ""}, dan peringkat nasional (1 =
                   nilai tertinggi).
                 </caption>
@@ -136,7 +153,7 @@ export function AccessibleDataTable({
                       scope="col"
                       className="px-3 py-2.5 text-right font-medium"
                     >
-                      {m.short}
+                      {valueHeader}
                     </th>
                     <th
                       scope="col"
@@ -191,7 +208,7 @@ export function AccessibleDataTable({
                           {row.province.region}
                         </td>
                         <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums text-fg">
-                          {m.format(row.value)}
+                          {row.value == null ? "—" : m.format(row.value)}
                         </td>
                         <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums text-muted-foreground">
                           {row.rank}
@@ -208,6 +225,9 @@ export function AccessibleDataTable({
               {m.higherIsBetter
                 ? "Nilai lebih tinggi umumnya lebih baik."
                 : "Nilai lebih rendah umumnya lebih baik."}
+              {historyYear != null
+                ? ` Nilai menampilkan frame ${historyYear}.`
+                : ""}
             </div>
           </div>
         </div>

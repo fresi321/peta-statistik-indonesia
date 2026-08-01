@@ -6,6 +6,7 @@ import {
   exportData,
   type ExportFormat,
   type ExportMode,
+  type HistoryExportShape,
 } from "@/lib/export-data";
 import {
   DATA_SOURCES,
@@ -16,6 +17,7 @@ import {
   type MetricKey,
   type ProvinceStats,
 } from "@/data/province-stats";
+import { getHistoryYears, hasHistory } from "@/lib/history-access";
 import { cn } from "@/lib/utils";
 
 type Scope = "filtered" | "all";
@@ -31,6 +33,8 @@ interface DownloadMenuProps {
   onOpenChange?: (open: boolean) => void;
   /** Hide built-in trigger button */
   hideTrigger?: boolean;
+  /** Active history year on the map (for snapshot export). */
+  historyYear?: number | null;
 }
 
 export function DownloadMenu({
@@ -42,6 +46,7 @@ export function DownloadMenu({
   open: openProp,
   onOpenChange,
   hideTrigger,
+  historyYear = null,
 }: DownloadMenuProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = openProp ?? internalOpen;
@@ -53,6 +58,8 @@ export function DownloadMenu({
   const [scope, setScope] = useState<Scope>("filtered");
   const [mode, setMode] = useState<ExportMode>("category");
   const [format, setFormat] = useState<ExportFormat>("csv");
+  const [historyShape, setHistoryShape] =
+    useState<HistoryExportShape>("snapshot");
   const [toast, setToast] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const panelId = useId();
@@ -60,8 +67,14 @@ export function DownloadMenu({
 
   const cat = getCategory(category);
   const m = METRIC_BY_KEY[metric];
+  const metricHasHistory = hasHistory(metric);
+  const historyYears = metricHasHistory ? getHistoryYears(metric) : null;
   const count = scope === "filtered" ? filtered.length : all.length;
   const isFiltered = filtered.length < all.length;
+  const longRowHint =
+    metricHasHistory && historyYears
+      ? count * historyYears.length
+      : count;
 
   useEffect(() => setMounted(true), []);
 
@@ -84,20 +97,35 @@ export function DownloadMenu({
     setScope(isFiltered ? "filtered" : "all");
   }, [isFiltered]);
 
+  useEffect(() => {
+    // Long series only applies to single-metric export with history
+    if (mode !== "metric" || !metricHasHistory) {
+      setHistoryShape("snapshot");
+    }
+  }, [mode, metricHasHistory, metric]);
+
   const handleDownload = () => {
     const provinces = scope === "filtered" ? filtered : all;
+    const useLong =
+      historyShape === "long" && mode === "metric" && metricHasHistory;
     const result = exportData({
       provinces,
       mode,
       format,
       category,
       metric,
+      historyYear: useLong ? null : historyYear,
+      historyShape: useLong ? "long" : "snapshot",
     });
     if (!result.ok) {
       setToast("Tidak ada data untuk diunduh");
       return;
     }
-    setToast(`Diunduh: ${result.filename} (${result.count} provinsi)`);
+    setToast(
+      useLong
+        ? `Diunduh: ${result.filename} (${result.count} baris deret)`
+        : `Diunduh: ${result.filename} (${result.count} provinsi)`,
+    );
     setOpen(false);
   };
 
@@ -182,6 +210,40 @@ export function DownloadMenu({
                 </div>
               </fieldset>
 
+              {metricHasHistory && mode === "metric" && (
+                <fieldset>
+                  <legend className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                    Deret waktu
+                  </legend>
+                  <div className="flex flex-col gap-1">
+                    <ModeBtn
+                      active={historyShape === "snapshot"}
+                      onClick={() => setHistoryShape("snapshot")}
+                      title={
+                        historyYear != null
+                          ? `Tahun aktif: ${historyYear}`
+                          : "Snapshot terkini"
+                      }
+                      desc={
+                        historyYear != null
+                          ? `Satu nilai per provinsi (${historyYear})`
+                          : "Satu nilai per provinsi (snapshot app)"
+                      }
+                    />
+                    <ModeBtn
+                      active={historyShape === "long"}
+                      onClick={() => setHistoryShape("long")}
+                      title="Seluruh deret (long)"
+                      desc={
+                        historyYears
+                          ? `${historyYears[0]}–${historyYears[historyYears.length - 1]} · ~${longRowHint} baris`
+                          : "Multi-tahun per provinsi"
+                      }
+                    />
+                  </div>
+                </fieldset>
+              )}
+
               <fieldset>
                 <legend className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   Format
@@ -208,7 +270,9 @@ export function DownloadMenu({
             <div className="shrink-0 border-t border-border px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
               <Button className="h-11 w-full gap-2" onClick={handleDownload}>
                 <Download className="size-4" aria-hidden />
-                Unduh {count} provinsi · {format.toUpperCase()}
+                {historyShape === "long" && mode === "metric" && metricHasHistory
+                  ? `Unduh ~${longRowHint} baris · ${format.toUpperCase()}`
+                  : `Unduh ${count} provinsi · ${format.toUpperCase()}`}
               </Button>
               <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
                 {DATA_SOURCES.requiredAttribution}

@@ -17,6 +17,7 @@ import {
   classColor,
   classProvinceCount,
 } from "@/lib/map-legend";
+import { historyMeanForYear, hasHistory } from "@/lib/history-access";
 import {
   metricMean,
   scaleKindForMetric,
@@ -31,6 +32,12 @@ export type ChoroplethLegendProps = {
   onHoveredClassChange: (index: number | null) => void;
   palette: PaletteMode;
   onPaletteChange: (mode: PaletteMode) => void;
+  /** Shared multi-year domain when history playback is active. */
+  domain?: { min: number; max: number } | null;
+  /** Active history year for class counts / mean. */
+  historyYear?: number | null;
+  adminLevel?: "province" | "regency";
+  parentFilter?: string | null;
 };
 
 export function ChoroplethLegend({
@@ -41,12 +48,21 @@ export function ChoroplethLegend({
   onHoveredClassChange,
   palette,
   onPaletteChange,
+  domain = null,
+  historyYear = null,
+  adminLevel = "province",
+  parentFilter = null,
 }: ChoroplethLegendProps) {
   const m = METRIC_BY_KEY[metric];
-  const range = metricRange(metric);
+  const range = domain ?? metricRange(metric);
   const kind = scaleKindForMetric(metric);
-  const mean = metricMean(metric);
+  const mean =
+    historyYear != null && hasHistory(metric, adminLevel)
+      ? (historyMeanForYear(metric, historyYear, adminLevel) ??
+        metricMean(metric))
+      : metricMean(metric);
   const [expanded, setExpanded] = useState(false);
+  const domainOrUndef = domain ?? undefined;
 
   useEffect(() => {
     setExpanded(false);
@@ -62,11 +78,17 @@ export function ChoroplethLegend({
   };
 
   const bins = Array.from({ length: LEGEND_CLASS_COUNT }, (_, i) => {
-    const b = classBounds(metric, i);
-    const count = classProvinceCount(metric, i);
+    const b = classBounds(metric, i, domainOrUndef);
+    const count = classProvinceCount(
+      metric,
+      i,
+      domainOrUndef,
+      historyYear,
+      { level: adminLevel, parentFilter },
+    );
     return {
       index: i,
-      color: classColor(i, metric, palette),
+      color: classColor(i, metric, palette, domainOrUndef),
       label: `${m.format(b.valueMin)} – ${m.format(b.valueMax)}`,
       count,
     };
@@ -88,6 +110,9 @@ export function ChoroplethLegend({
               <span className="font-normal text-muted-foreground">
                 {" "}
                 · {kind === "diverging" ? "diverging" : "sequential"}
+                {domain != null && historyYear != null
+                  ? ` · ${historyYear}`
+                  : ""}
               </span>
             </p>
             {activeClass !== null && (

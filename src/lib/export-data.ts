@@ -13,10 +13,18 @@ import {
   type ProvinceStats,
 } from "@/data/province-stats";
 import { getEntities } from "@/data/province-entities";
+import {
+  buildHistoryLongRows,
+  getHistory,
+  getHistoryValue,
+  hasHistory,
+} from "@/lib/history-access";
 
 export type ExportScope = "filtered" | "all";
 export type ExportFormat = "csv" | "json";
 export type ExportMode = "category" | "full" | "metric";
+/** snapshot = one year (or current); long = multi-year rows for one metric */
+export type HistoryExportShape = "snapshot" | "long";
 
 function escapeCsv(value: string | number): string {
   const s = String(value);
@@ -38,9 +46,28 @@ function stamp(): string {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`;
 }
 
+function roundMetric(raw: number): number {
+  return typeof raw === "number" && !Number.isInteger(raw)
+    ? Math.round(raw * 1000) / 1000
+    : raw;
+}
+
+function valueForExport(
+  p: ProvinceStats,
+  key: MetricKey,
+  historyYear?: number | null,
+): number {
+  if (historyYear != null && hasHistory(key)) {
+    const v = getHistoryValue(p.geoKey, key, historyYear);
+    if (v != null) return roundMetric(v);
+  }
+  return roundMetric(getMetricValue(p, key));
+}
+
 export function buildExportRows(
   provinces: ProvinceStats[],
   metricKeys: MetricKey[],
+  historyYear?: number | null,
 ): Record<string, string | number>[] {
   return provinces.map((p, i) => {
     const row: Record<string, string | number> = {
@@ -50,12 +77,11 @@ export function buildExportRows(
       wilayah: p.region,
       geo_key: p.geoKey,
     };
+    if (historyYear != null) {
+      row.tahun = historyYear;
+    }
     for (const key of metricKeys) {
-      const raw = getMetricValue(p, key);
-      row[key] =
-        typeof raw === "number" && !Number.isInteger(raw)
-          ? Math.round(raw * 1000) / 1000
-          : raw;
+      row[key] = valueForExport(p, key, historyYear);
     }
     const ent = getEntities(p.geoKey);
     if (ent) {
@@ -67,6 +93,32 @@ export function buildExportRows(
       row.komoditas_nama = ent.commodities.items.map((x) => x.name).join("; ");
     }
     return row;
+  });
+}
+
+/** Long-format multi-year export for one metric. */
+export function buildHistoryLongExportRows(
+  provinces: ProvinceStats[],
+  metric: MetricKey,
+): Record<string, string | number>[] {
+  const byKey = Object.fromEntries(provinces.map((p) => [p.geoKey, p]));
+  const long = buildHistoryLongRows(
+    metric,
+    provinces.map((p) => p.geoKey),
+  );
+  return long.map((r, i) => {
+    const p = byKey[r.geoKey];
+    return {
+      peringkat: i + 1,
+      provinsi: p?.name ?? r.geoKey,
+      ibu_kota: p?.capital ?? "",
+      wilayah: p?.region ?? "",
+      geo_key: r.geoKey,
+      tahun: r.year,
+      [metric]: roundMetric(r.value),
+      metrik: metric,
+      metrik_label: METRIC_BY_KEY[metric].label,
+    };
   });
 }
 
@@ -123,8 +175,19 @@ export function toCsv(
 export function toJson(
   provinces: ProvinceStats[],
   metricKeys: MetricKey[],
-  meta: { category?: string; metric?: string; note: string },
+  meta: {
+    category?: string;
+    metric?: string;
+    note: string;
+    historyYear?: number | null;
+    historyShape?: HistoryExportShape;
+    historyMetricKey?: MetricKey | null;
+  },
 ): string {
+  const historyYear = meta.historyYear ?? null;
+  const historyShape = meta.historyShape ?? "snapshot";
+  const historyMetricKey = meta.historyMetricKey ?? null;
+
   const payload = {
     exportedAt: new Date().toISOString(),
     source: DATA_SOURCES.processorName,
@@ -167,35 +230,48 @@ export function toJson(
     note: meta.note,
     category: meta.category ?? null,
     metric: meta.metric ?? null,
+    historyYear,
+    historyShape,
+    historyYears:
+      historyShape === "long" && historyMetricKey
+        ? (getHistory(historyMetricKey)?.years ?? null)
+        : null,
     count: provinces.length,
     metrics: metricKeys.map((k) => ({
       key: k,
       label: METRIC_BY_KEY[k].label,
       unit: METRIC_BY_KEY[k].unit,
     })),
-    data: provinces.map((p) => {
-      const values: Record<string, number> = {};
-      for (const key of metricKeys) {
-        values[key] = getMetricValue(p, key);
-      }
-      const ent = getEntities(p.geoKey);
-      return {
-        name: p.name,
-        capital: p.capital,
-        region: p.region,
-        geoKey: p.geoKey,
-        values,
-        entities: ent
-          ? {
-              universities: ent.universities,
-              hospitals: ent.hospitals,
-              attractions: ent.attractions,
-              commodities: ent.commodities,
+    data:
+      historyShape === "long" && historyMetricKey
+        ? buildHistoryLongExportRows(provinces, historyMetricKey)
+        : provinces.map((p) => {
+            const values: Record<string, number> = {};
+            for (const key of metricKeys) {
+              values[key] = valueForExport(p, key, historyYear);
             }
-          : null,
-      };
-    }),
+            const ent = getEntities(p.geoKey);
+            return {
+              name: p.name,
+              capital: p.capital,
+              region: p.region,
+              geoKey: p.geoKey,
+              ...(historyYear != null ? { year: historyYear } : {}),
+              values,
+              entities: ent
+                ? {
+                    universities: ent.universities,
+                    hospitals: ent.hospitals,
+                    attractions: ent.attractions,
+                    commodities: ent.commodities,
+                  }
+                : null,
+            };
+          }),
   };
+  if (historyShape === "long" && Array.isArray(payload.data)) {
+    (payload as { count: number }).count = payload.data.length;
+  }
   return JSON.stringify(payload, null, 2);
 }
 
@@ -218,8 +294,20 @@ export function exportData(opts: {
   format: ExportFormat;
   category?: CategoryKey;
   metric?: MetricKey;
+  /** Active history year for snapshot export (metric mode). */
+  historyYear?: number | null;
+  /** long = multi-year rows for the active metric when it has history. */
+  historyShape?: HistoryExportShape;
 }) {
-  const { provinces, mode, format, category, metric } = opts;
+  const {
+    provinces,
+    mode,
+    format,
+    category,
+    metric,
+    historyYear = null,
+    historyShape = "snapshot",
+  } = opts;
   if (provinces.length === 0) return { ok: false as const, reason: "empty" };
 
   let metricKeys: MetricKey[];
@@ -237,27 +325,60 @@ export function exportData(opts: {
     namePart = "semua-indikator";
   }
 
+  const useLong =
+    historyShape === "long" &&
+    mode === "metric" &&
+    metric != null &&
+    hasHistory(metric);
+
+  const sortKey = metricKeys[0]!;
   const sorted = [...provinces].sort(
     (a, b) =>
-      getMetricValue(b, metricKeys[0]) - getMetricValue(a, metricKeys[0]),
+      valueForExport(b, sortKey, useLong ? null : historyYear) -
+      valueForExport(a, sortKey, useLong ? null : historyYear),
   );
 
   const note = DATA_SOURCES.disclaimer;
-  const base = `peta-statistik-${namePart}-${stamp()}`;
+  const yearPart =
+    useLong && metric
+      ? `history-${slug(METRIC_BY_KEY[metric].short)}`
+      : historyYear != null
+        ? String(historyYear)
+        : null;
+  const base = yearPart
+    ? `peta-statistik-${namePart}-${yearPart}-${stamp()}`
+    : `peta-statistik-${namePart}-${stamp()}`;
 
   if (format === "csv") {
-    const rows = buildExportRows(sorted, metricKeys);
-    downloadBlob(toCsv(rows, metricKeys), `${base}.csv`, "text/csv;charset=utf-8");
-  } else {
-    const json = toJson(sorted, metricKeys, {
-      category: category
-        ? CATEGORIES.find((c) => c.key === category)?.label
-        : undefined,
-      metric: metric ? METRIC_BY_KEY[metric].label : undefined,
-      note,
-    });
-    downloadBlob(json, `${base}.json`, "application/json;charset=utf-8");
+    const rows = useLong && metric
+      ? buildHistoryLongExportRows(sorted, metric)
+      : buildExportRows(sorted, metricKeys, historyYear);
+    const keysForCsv = useLong && metric ? [metric] : metricKeys;
+    downloadBlob(
+      toCsv(rows, keysForCsv),
+      `${base}.csv`,
+      "text/csv;charset=utf-8",
+    );
+    return {
+      ok: true as const,
+      count: useLong ? rows.length : sorted.length,
+      filename: `${base}.csv`,
+    };
   }
 
-  return { ok: true as const, count: sorted.length, filename: `${base}.${format}` };
+  const json = toJson(sorted, metricKeys, {
+    category: category
+      ? CATEGORIES.find((c) => c.key === category)?.label
+      : undefined,
+    metric: metric ? METRIC_BY_KEY[metric].label : undefined,
+    note,
+    historyYear: useLong ? null : historyYear,
+    historyShape: useLong ? "long" : "snapshot",
+    historyMetricKey: useLong && metric ? metric : null,
+  });
+  downloadBlob(json, `${base}.json`, "application/json;charset=utf-8");
+  const count = useLong && metric
+    ? buildHistoryLongExportRows(sorted, metric).length
+    : sorted.length;
+  return { ok: true as const, count, filename: `${base}.json` };
 }

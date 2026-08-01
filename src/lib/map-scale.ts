@@ -41,19 +41,30 @@ export function metricMean(metric: MetricKey): number {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
+/** Optional domain/mid overrides for multi-year shared legends (history playback). */
+export type ColorScaleOpts = {
+  domain?: { min: number; max: number };
+  /** Diverging midpoint; defaults to metricMean(metric) when omitted. */
+  mid?: number;
+};
+
 /**
  * Map a raw value to legend position t∈[0,1].
  * Sequential: min→max. Diverging: min→mean→max with mean at 0.5.
  */
-export function valueToColorT(value: number, metric: MetricKey): number {
+export function valueToColorT(
+  value: number,
+  metric: MetricKey,
+  opts?: ColorScaleOpts,
+): number {
   const kind = scaleKindForMetric(metric);
-  const range = metricRange(metric);
+  const range = opts?.domain ?? metricRange(metric);
 
   if (kind === "sequential") {
     return normalize(value, range.min, range.max);
   }
 
-  const mid = metricMean(metric);
+  const mid = opts?.mid ?? metricMean(metric);
   if (value <= mid) {
     const span = mid - range.min;
     if (span <= 0) return 0.5;
@@ -68,9 +79,10 @@ export function mapColorForValue(
   value: number,
   metric: MetricKey,
   palette: PaletteMode = "default",
+  opts?: ColorScaleOpts,
 ): string {
   const m = METRIC_BY_KEY[metric];
-  const t = valueToColorT(value, metric);
+  const t = valueToColorT(value, metric, opts);
   return choroplethColor(t, m.higherIsBetter, {
     kind: scaleKindForMetric(metric),
     palette,

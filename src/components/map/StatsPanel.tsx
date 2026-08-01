@@ -4,6 +4,8 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -35,6 +37,15 @@ import {
   type MetricKey,
   type ProvinceStats,
 } from "@/data/province-stats";
+import {
+  getHistoryPoints,
+  hasHistory,
+  historyMeanForYear,
+} from "@/lib/history-access";
+import {
+  provinceRankAtYear,
+  resolveMetricValue,
+} from "@/lib/map-legend";
 import { CHART_COLORS } from "@/lib/map-colors";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +55,12 @@ interface StatsPanelProps {
   category?: CategoryKey;
   onClose: () => void;
   className?: string;
+  /** Active history year frame (null = snapshot). */
+  historyYear?: number | null;
+  /** Shared multi-year domain for the scale bar. */
+  historyDomain?: { min: number; max: number } | null;
+  /** Drill to kab/kota within this province. */
+  onDrillRegency?: () => void;
 }
 
 function shortName(name: string) {
@@ -71,6 +88,9 @@ export function StatsPanel({
   category = "demografi",
   onClose,
   className,
+  historyYear = null,
+  historyDomain = null,
+  onDrillRegency,
 }: StatsPanelProps) {
   if (!province) {
     return (
@@ -88,8 +108,9 @@ export function StatsPanel({
   const m = METRIC_BY_KEY[metric];
   const cat = getCategory(category);
   const catMetrics = metricsForCategory(category);
-  const value = getMetricValue(province, metric);
-  const range = metricRange(metric);
+  const useHistory = historyYear != null && hasHistory(metric);
+  const value = resolveMetricValue(province, metric, historyYear);
+  const range = historyDomain ?? metricRange(metric);
   const src = primarySourceForMetric(metric);
   const allSrc = getSourcesForMetric(metric);
   const entities = getEntities(province.geoKey);
@@ -107,28 +128,45 @@ export function StatsPanel({
       { title: "Komoditas unggulan", list: entities.commodities, key: "commodities" },
     ].filter((x) => !primaryList || x.title !== primaryList.title);
 
-  const rank =
-    [...PROVINCES]
-      .sort((a, b) => getMetricValue(b, metric) - getMetricValue(a, metric))
-      .findIndex((p) => p.geoKey === province.geoKey) + 1;
+  const { rank, total: rankTotal } = provinceRankAtYear(
+    province.geoKey,
+    metric,
+    historyYear,
+  );
 
   const peers = PROVINCES.filter((p) => p.region === province.region)
-    .map((p) => ({
-      name: shortName(p.name),
-      full: p.name,
-      value: getMetricValue(p, metric),
-      self: p.geoKey === province.geoKey,
-    }))
+    .map((p) => {
+      const v = resolveMetricValue(p, metric, historyYear);
+      return {
+        name: shortName(p.name),
+        full: p.name,
+        value: v ?? 0,
+        missing: v == null,
+        self: p.geoKey === province.geoKey,
+      };
+    })
+    .filter((p) => !p.missing)
     .sort((a, b) => b.value - a.value);
 
   const nationalAvg =
-    PROVINCES.reduce((s, p) => s + getMetricValue(p, metric), 0) /
-    PROVINCES.length;
+    useHistory && historyYear != null
+      ? (historyMeanForYear(metric, historyYear) ?? 0)
+      : PROVINCES.reduce((s, p) => s + getMetricValue(p, metric), 0) /
+        PROVINCES.length;
 
-  const vsNational = value - nationalAvg;
+  const vsNational = value != null ? value - nationalAvg : 0;
   const better =
-    (m.higherIsBetter && vsNational >= 0) ||
-    (!m.higherIsBetter && vsNational <= 0);
+    value != null &&
+    ((m.higherIsBetter && vsNational >= 0) ||
+      (!m.higherIsBetter && vsNational <= 0));
+
+  const historyPoints = hasHistory(metric)
+    ? getHistoryPoints(province.geoKey, metric)
+    : null;
+  const sparkData =
+    historyPoints
+      ?.filter((p) => p.value != null)
+      .map((p) => ({ year: p.year, value: p.value as number })) ?? [];
 
   return (
     <aside
@@ -166,12 +204,16 @@ export function StatsPanel({
         <div className="rounded-xl border border-border bg-surface-elevated p-4">
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             {m.label}
+            {useHistory && historyYear != null ? ` · ${historyYear}` : ""}
           </p>
           <p className="mt-1 font-mono text-3xl font-medium tabular-nums tracking-tight text-fg">
-            {m.format(value)}
+            {value == null ? "—" : m.format(value)}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <Badge variant="secondary">{reliabilityLabel(src.reliability)}</Badge>
+            {useHistory && (
+              <Badge variant="accent">Frame {historyYear}</Badge>
+            )}
             <a
               href={src.url}
               target="_blank"
@@ -181,49 +223,158 @@ export function StatsPanel({
               {src.shortName}
               <ExternalLink className="size-3" />
             </a>
-            <span className="text-[11px] text-muted-foreground">{src.year}</span>
+            <span className="text-[11px] text-muted-foreground">
+              {useHistory ? String(historyYear) : src.year}
+            </span>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
             <Badge variant="secondary">
-              Peringkat #{rank} / {PROVINCES.length}
+              Peringkat #{rank} / {rankTotal}
             </Badge>
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 font-medium",
-                better ? "text-success" : "text-warn",
-              )}
-            >
-              {better ? (
-                <TrendingUp className="size-3.5" />
-              ) : (
-                <TrendingDown className="size-3.5" />
-              )}
-              {m.higherIsBetter
-                ? vsNational >= 0
-                  ? "di atas"
-                  : "di bawah"
-                : vsNational <= 0
-                  ? "lebih baik dari"
-                  : "lebih tinggi dari"}{" "}
-              rata-rata nasional
-            </span>
+            {value != null && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 font-medium",
+                  better ? "text-success" : "text-warn",
+                )}
+              >
+                {better ? (
+                  <TrendingUp className="size-3.5" />
+                ) : (
+                  <TrendingDown className="size-3.5" />
+                )}
+                {m.higherIsBetter
+                  ? vsNational >= 0
+                    ? "di atas"
+                    : "di bawah"
+                  : vsNational <= 0
+                    ? "lebih baik dari"
+                    : "lebih tinggi dari"}{" "}
+                rata-rata
+                {useHistory ? ` ${historyYear}` : " nasional"}
+              </span>
+            )}
           </div>
+          {onDrillRegency && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="mt-3 h-10 w-full text-xs"
+              onClick={onDrillRegency}
+            >
+              Lihat kab/kota di {province.name}
+            </Button>
+          )}
           <div className="mt-4">
             <div className="mb-1.5 flex justify-between text-[11px] text-muted-foreground">
               <span>{m.format(range.min)}</span>
-              <span>skala nasional</span>
+              <span>
+                {useHistory ? "skala deret (shared)" : "skala nasional"}
+              </span>
               <span>{m.format(range.max)}</span>
             </div>
             <div className="relative h-2 overflow-hidden rounded-full bg-muted">
               <div
                 className="absolute inset-y-0 left-0 rounded-full bg-accent/80"
                 style={{
-                  width: `${normalize(value, range.min, range.max) * 100}%`,
+                  width:
+                    value == null
+                      ? "0%"
+                      : `${normalize(value, range.min, range.max) * 100}%`,
                 }}
               />
             </div>
           </div>
         </div>
+
+        {sparkData.length >= 2 && (
+          <div className="mt-4 rounded-xl border border-border bg-surface-elevated p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-medium text-fg">Tren multi-tahun</h3>
+                <p className="text-[11px] text-muted-foreground">
+                  {sparkData[0]!.year}–{sparkData[sparkData.length - 1]!.year}
+                  {historyYear != null ? ` · sorot ${historyYear}` : ""}
+                </p>
+              </div>
+            </div>
+            <div className="h-36 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={sparkData}
+                  margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke={CHART_COLORS.grid}
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="year"
+                    tick={{ fill: CHART_COLORS.tick, fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fill: CHART_COLORS.tick, fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={40}
+                    domain={
+                      historyDomain
+                        ? [historyDomain.min, historyDomain.max]
+                        : ["auto", "auto"]
+                    }
+                    tickFormatter={(v) =>
+                      new Intl.NumberFormat("id-ID", {
+                        notation: "compact",
+                        maximumFractionDigits: 1,
+                      }).format(Number(v))
+                    }
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: CHART_COLORS.tooltipBg,
+                      border: `1px solid ${CHART_COLORS.tooltipBorder}`,
+                      borderRadius: 10,
+                      fontSize: 12,
+                      color: CHART_COLORS.tooltipText,
+                    }}
+                    formatter={(val: number) => [m.format(val), m.short]}
+                    labelFormatter={(y) => `Tahun ${y}`}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="value"
+                    stroke={CHART_COLORS.barSelf}
+                    strokeWidth={2}
+                    dot={(props) => {
+                      const { cx, cy, payload } = props;
+                      const active =
+                        historyYear != null && payload.year === historyYear;
+                      return (
+                        <circle
+                          key={payload.year}
+                          cx={cx}
+                          cy={cy}
+                          r={active ? 5 : 3}
+                          fill={
+                            active
+                              ? CHART_COLORS.barSelf
+                              : CHART_COLORS.barPeer
+                          }
+                          stroke={CHART_COLORS.tooltipBg}
+                          strokeWidth={active ? 2 : 0}
+                        />
+                      );
+                    }}
+                    activeDot={{ r: 5 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
 
         {primaryList && (
           <EntityListSection
@@ -267,6 +418,7 @@ export function StatsPanel({
           </h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {m.label} antar provinsi se-kawasan
+            {useHistory && historyYear != null ? ` (${historyYear})` : ""}
           </p>
           <div className="mt-3 h-48 w-full">
             <ResponsiveContainer width="100%" height="100%">
